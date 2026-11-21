@@ -57,13 +57,15 @@ def candidates(catalog: list, need: Needs, city_id: str) -> dict[str, list[dict]
     return out
 
 
-def kits(catalog: list, need: Needs, city_id: str | None = None) -> list[list[dict]]:
+def kits(catalog: list, need: Needs, city_id: str | None = None, shown: frozenset = frozenset()) -> list[list[dict]]:
     """Все комплекты (по одному товару каждой запрошенной категории) из самых дешёвых подходящих товаров,
-    от дешёвого к дорогому. Бюджет здесь не учитывается: его проверяет вызывающий."""
+    от дешёвого к дорогому. Бюджет здесь не учитывается: его проверяет вызывающий. shown: ID уже показанных
+    товаров; они не занимают мест среди самых дешёвых, иначе до остальных товаров очередь не дойдёт."""
     found = candidates(catalog, need, city_id or need.city_id)
     if not found or any(not items for items in found.values()):
         return []
-    combos = itertools.product(*(found[c][:PER_CATEGORY] for c in need.categories))
+    near = lambda items: [i for i in items if i["id"] not in shown][:PER_CATEGORY] + [i for i in items if i["id"] in shown][:PER_CATEGORY]
+    combos = itertools.product(*(near(found[c]) for c in need.categories))
     return sorted((list(k) for k in combos), key=lambda k: (sum(i["price_rub"] for i in k), [i["id"] for i in k]))
 
 
@@ -71,14 +73,19 @@ def total(kit: list[dict]) -> int:
     return sum(i["price_rub"] for i in kit)
 
 
-def options(catalog: list, need: Needs, count: int = 3) -> list[list[dict]]:
+def options(catalog: list, need: Needs, count: int = 3, shown: frozenset = frozenset()) -> list[list[dict]]:
     """До трёх комплектов в бюджете. Первый самый дешёвый. Каждый следующий выбирается так, чтобы в нём было как
     можно больше товаров, которых не было в предыдущих вариантах (при равенстве берём дешевле): три комплекта,
-    отличающиеся одной лампой, покупателю мало что дают."""
-    pool = [k for k in kits(catalog, need) if need.no_limit or total(k) <= need.budget_rub]
-    chosen, used = [], set()
+    отличающиеся одной лампой, покупателю мало что дают.
+
+    shown: ID товаров, которые покупателю уже показывали и которые ему не подошли. Комплект целиком из них
+    не предлагаем, а среди остальных сначала идут те, где нового больше."""
+    pool = [k for k in kits(catalog, need, shown=shown) if need.no_limit or total(k) <= need.budget_rub]
+    old = {i["id"] for k in pool for i in k if i["id"] in shown}
+    pool = [k for k in pool if any(i["id"] not in old for i in k)]
+    chosen, used = [], set(old)
     while pool and len(chosen) < count:
-        best = max(pool, key=lambda k: (len({i["id"] for i in k} - used), -total(k))) if chosen else pool[0]
+        best = max(pool, key=lambda k: (len({i["id"] for i in k} - used), -total(k))) if chosen or old else pool[0]
         chosen.append(best)
         used |= {i["id"] for i in best}
         pool.remove(best)

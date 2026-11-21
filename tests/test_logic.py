@@ -20,7 +20,7 @@ def item(id_, category, price, city="taganrog", **attrs):
 
 
 def raw(**over):
-    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "city_said": "Таганрог", "city_id": "taganrog",
+    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "wants_other": "no", "city_said": "Таганрог", "city_id": "taganrog",
             "budget_said": "exact", "budget_value": 15000, "budget_unit": "rub", "table_width": [], "chair_adjustable": "any",
             "lamp_color_temperature": []}
     base.update(over)
@@ -165,6 +165,12 @@ class Normalize(unittest.TestCase):
         need = extract.normalize(raw(categories=[], city_id="none", city_said="", budget_said="none"), CITIES)
         self.assertEqual((need.problem_categories, need.problem_city, need.problem_budget), ("missing", "missing", "missing"))
         self.assertEqual(extract.normalize(raw(city_id="several"), CITIES).problem_city, "several")
+        moved = extract.normalize(raw(city_id="another", city_said="Азов"), CITIES)
+        self.assertEqual(moved.problem_city, "another")
+        ask = reply.clarify(moved, NAMES)["questions"]
+        self.assertEqual([q["field"] for q in ask], ["city_id"])
+        self.assertIn("Таганрог или Ростов-на-Дону", ask[0]["text"])
+        self.assertNotIn("Азов", ask[0]["text"])
 
     def test_repeated_budget_question_explains_and_gives_a_floor(self):
         need = extract.normalize(raw(categories=["chair", "lamp"], budget_said="vague", budget_value=0), CITIES)
@@ -197,6 +203,41 @@ class Normalize(unittest.TestCase):
         self.assertNotIn("в пределах", nothing["message"])
         self.assertNotIn("бюджет", nothing["message"])
         self.assertEqual(extract.normalize(raw(budget_said="vague", budget_value=0), CITIES).problem_budget, "unclear")
+
+    def test_rejected_options_are_not_offered_again(self):
+        catalog = [item("l%d" % n, "lamp", 400 + n * 100) for n in range(1, 6)]
+        need = extract.normalize(raw(categories=["lamp"], budget_value=300000, wants_other="yes"), CITIES)
+        self.assertTrue(need.wants_other)
+        first = reply.ok(need, picker.options(catalog, need), NAMES)
+        self.assertEqual([o["listing_ids"] for o in first["options"]], [["l1"], ["l2"], ["l3"]])
+        talk = [{"role": "user", "text": "лампа"}, {"role": "assistant", "text": " ".join(o["explanation"] for o in first["options"])},
+                {"role": "user", "text": "мне не нравится"}]
+        catalog.append(dict(item("twin", "lamp", 9999), title="Товар l1"))      # то же название, другое объявление
+        shown = reply.shown_ids(talk, catalog)
+        self.assertEqual(shown, {"l1", "l2", "l3"})
+        self.assertEqual(picker.options(catalog, need, shown=shown)[-1][0]["id"], "twin")
+        catalog.pop()
+        second = picker.options(catalog, need, shown=shown)
+        self.assertEqual([[i["id"] for i in k] for k in second], [["l4"], ["l5"]])
+        self.assertIn("ещё не показанных", reply.ok(need, second, NAMES, True)["options"][0]["explanation"])
+        many = [item("m%02d" % n, "lamp", 100 + n) for n in range(1, 13)]           # все двенадцать доходят до покупателя
+        got, seen = [], frozenset()
+        while True:
+            batch = picker.options(many, need, shown=seen)
+            if not batch:
+                break
+            got += [k[0]["id"] for k in batch]
+            seen = frozenset(got)
+        self.assertEqual(sorted(got), ["m%02d" % n for n in range(1, 13)])
+        everything = frozenset("l%d" % n for n in range(1, 6))
+        self.assertEqual(picker.options(catalog, need, shown=everything), [])
+        self.assertEqual(reply.no_more(need, NAMES)["status"], "no_match")
+        # в комплекте из двух товаров достаточно одного нового; комплект целиком из показанного не возвращается
+        catalog += [item("t1", "table", 1000), item("t2", "table", 2000)]
+        both = extract.normalize(raw(categories=["table", "lamp"], budget_value=300000), CITIES)
+        again = picker.options(catalog, both, shown=frozenset({"t1", "l1", "l2"}))
+        self.assertTrue(all({"t2", "l3", "l4", "l5"} & {i["id"] for i in k} for k in again))
+        self.assertEqual({i["id"] for i in again[0]}, {"t2", "l3"})
 
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},

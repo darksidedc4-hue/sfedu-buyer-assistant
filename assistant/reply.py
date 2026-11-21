@@ -83,6 +83,9 @@ def clarify(need: Needs, city_names: dict[str, str], budget_again: bool = False,
     if need.problem_city == "unknown":
         questions.append({"field": "city_id", "text": "Города «%s» нет в моём справочнике. Комплект собирается для самовывоза "
                           "в одном городе: %s. Какой из них вам подходит?" % (need.city_said or "?", cities)})
+    elif need.problem_city == "another":
+        rest = [name for name in city_names.values() if name.lower() != need.city_said.lower()] or list(city_names.values())
+        questions.append({"field": "city_id", "text": "В каком городе искать: %s?" % _join(rest, "или")})
     elif need.problem_city == "several":
         questions.append({"field": "city_id", "text": "Комплект собирается для самовывоза в одном городе. В каком из них "
                           "забирать: %s?" % cities})
@@ -104,13 +107,30 @@ def clarify(need: Needs, city_names: dict[str, str], budget_again: bool = False,
     return {"status": "clarify", "questions": questions}
 
 
-def ok(need: Needs, kits: list[list[dict]], city_names: dict[str, str]) -> dict:
+def shown_ids(messages: list[dict], catalog: list) -> frozenset:
+    """Товары, уже показанные покупателю: их строка из ответа (название, характеристики, цена) есть в прошлых
+    репликах помощника. Сверяем полную строку: в каталоге встречаются разные объявления с одним названием."""
+    said = " ".join(" ".join(m["text"].split()) for m in messages if m["role"] == "assistant")
+    return frozenset(i["id"] for i in catalog if picker.valid(i) and item_text(i) in said)
+
+
+def no_more(need: Needs, city_names: dict[str, str]) -> dict:
+    """Все подходящие комплекты уже показаны и не подошли: честно говорим, что других нет."""
+    rules = conditions(need)
+    tips = ["выбрать другой город"] + ([] if need.no_limit else ["поднять бюджет"]) + (
+        ["смягчить условие (%s)" % "; ".join(rules)] if rules else [])
+    return {"status": "no_match", "message": "Других вариантов (%s) в городе %s под ваши условия в каталоге нет: все подходящие "
+            "я уже показал. Что можно изменить: %s. Скажите, как поступим." % (
+                _join([NAME[c] for c in need.categories]), city_names.get(need.city_id, need.city_id), "; ".join(tips))}
+
+
+def ok(need: Needs, kits: list[list[dict]], city_names: dict[str, str], other: bool = False) -> dict:
     city = city_names.get(need.city_id, need.city_id)
     rules = conditions(need)
     options = []
     for n, kit in enumerate(kits):
         sum_rub = picker.total(kit)
-        lead = "Самый дешёвый подходящий комплект" if n == 0 else "Другой вариант, на %s дороже первого" % rub(
+        lead = ("Самый дешёвый из ещё не показанных комплектов" if other else "Самый дешёвый подходящий комплект") if n == 0 else "Другой вариант, на %s дороже первого" % rub(
             sum_rub - picker.total(kits[0])) if sum_rub > picker.total(kits[0]) else "Вариант за те же деньги"
         text = "%s, город %s: %s. Итого %s" % (lead, city, "; ".join(item_text(i) for i in kit), rub(sum_rub))
         if need.no_limit:

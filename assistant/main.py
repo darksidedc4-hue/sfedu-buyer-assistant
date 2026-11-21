@@ -47,9 +47,13 @@ def answer(messages: list[dict], catalog: list, deadline: float | None = None) -
             cheapest = picker.kits(catalog, need)
             floor = picker.total(cheapest[0]) if cheapest else None
         return reply.clarify(need, city_names, again, floor)
-    kits = picker.options(catalog, need)
+    # показанное не подошло: предлагаем следующее, а не тот же список. Что показано, видно из истории диалога.
+    shown = reply.shown_ids(messages, catalog) if need.wants_other else frozenset()
+    kits = picker.options(catalog, need, shown=shown)
     if kits:
-        return reply.ok(need, kits, city_names)
+        return reply.ok(need, kits, city_names, bool(shown))
+    if shown and picker.options(catalog, need):
+        return reply.no_more(need, city_names)
     return reply.no_match(need, picker.why_nothing(catalog, need, list(city_names)), city_names)
 
 

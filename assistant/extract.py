@@ -34,8 +34,9 @@ class Needs:
     unsupported: list[str] = field(default_factory=list)
     city_id: str = ""
     city_said: str = ""
-    problem_city: str = ""              # "", "missing", "unknown", "several"
+    problem_city: str = ""              # "", "missing", "unknown", "several", "another"
     budget_rub: int | None = None
+    wants_other: bool = False           # показанные варианты не подошли: нужны другие, а не те же самые
     no_limit: bool = False              # покупатель сам отказался от предела по сумме: это его решение, а не подстановка
     problem_budget: str = ""            # "", "missing", "unclear"
     width_cm: list[tuple[str, float]] = field(default_factory=list)
@@ -48,14 +49,15 @@ def schema(city_ids: list[str]) -> dict:
         "op": {"type": "string", "enum": list(OPS)}, "value": {"type": "number"}, "unit": {"type": "string"}}}
     return {
         "type": "object", "additionalProperties": False,
-        "required": ["categories", "other_items", "what_is_unclear", "city_said", "city_id", "budget_said", "budget_value",
+        "required": ["categories", "other_items", "what_is_unclear", "wants_other", "city_said", "city_id", "budget_said", "budget_value",
                      "budget_unit", "table_width", "chair_adjustable", "lamp_color_temperature"],
         "properties": {
             "categories": {"type": "array", "items": {"type": "string", "enum": list(CATEGORIES)}},
             "other_items": {"type": "array", "items": {"type": "string"}},
             "what_is_unclear": {"type": "boolean"},
+            "wants_other": {"type": "string", "enum": ["yes", "no"]},
             "city_said": {"type": "string"},
-            "city_id": {"type": "string", "enum": city_ids + ["other", "several", "none"]},
+            "city_id": {"type": "string", "enum": city_ids + ["other", "several", "another", "none"]},
             "budget_said": {"type": "string", "enum": ["exact", "unlimited", "vague", "none"]},
             "budget_value": {"type": "number", "minimum": 0},
             "budget_unit": {"type": "string", "enum": ["rub", "thousand_rub", "million_rub"]},
@@ -89,11 +91,16 @@ other_items: всё, что он хочет купить, но чего нет �
 вне каталога.
 what_is_unclear: true, если непонятно, что именно покупать («мебель для кабинета», «что-нибудь для работы»), \
 и ни одной категории назвать нельзя.
+wants_other: yes, только если помощник в предыдущей реплике уже показал варианты товаров, а покупатель в последней \
+реплике ими недоволен или просит другие («не нравится», «не то», «другие», «ещё варианты», «покажи ещё», \
+грубое слово в адрес показанного). Во всех остальных случаях no, в том числе когда вариантов ещё не показывали.
 
 city_said: город, который назвал покупатель, в именительном падеже («в Батайске» это «Батайск»); пустая строка, \
 если не назвал.
 city_id: идентификатор города из справочника (%s). other: назван город, которого нет в справочнике. several: названо \
-несколько городов на выбор и не ясно, какой. none: город не назван.
+несколько городов на выбор и не ясно, какой. none: город не назван. another: покупатель в последних репликах \
+отказался от прежнего города или попросил искать в другом, но новый город не назвал («хочу в другом городе», \
+«не в Азове», «давай другой город»); тогда в city_said оставь прежний город.
 
 budget_said: exact, если назван общий предел в деньгах; vague, если о деньгах сказано без числа («недорого», \
 «подешевле», «в разумных пределах») или названа вилка без верхнего предела; none, если о бюджете ничего нет. \
@@ -124,17 +131,17 @@ chair_adjustable: yes, если нужна регулировка высоты �
 
 Примеры.
 Диалог: 1. Покупатель: Стол не шире метра, кресло и лампа. Таганрог. До 15 000 ₽ за всё.
-Ответ: {"categories":["table","chair","lamp"],"other_items":[],"what_is_unclear":false,"city_said":"Таганрог",\
+Ответ: {"categories":["table","chair","lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no","city_said":"Таганрог",\
 "city_id":"taganrog","budget_said":"exact","budget_value":15000,"budget_unit":"rub",\
 "table_width":[{"op":"<=","value":1,"unit":"m"}],"chair_adjustable":"any","lamp_color_temperature":[]}
 Диалог: 1. Покупатель: Нужны кресло с регулировкой высоты и лампа теплее 3500 К, недорого. 2. Помощник: В каком \
 городе и какой бюджет? 3. Покупатель: Ростов, 9 тысяч. И диван ещё.
-Ответ: {"categories":["chair","lamp"],"other_items":["диван"],"what_is_unclear":false,"city_said":"Ростов",\
+Ответ: {"categories":["chair","lamp"],"other_items":["диван"],"what_is_unclear":false,"wants_other":"no","city_said":"Ростов",\
 "city_id":"rostov-na-donu","budget_said":"exact","budget_value":9,"budget_unit":"thousand_rub","table_width":[],\
 "chair_adjustable":"yes","lamp_color_temperature":[{"op":"<","value":3500,"unit":"K"}]}
 Диалог: 1. Покупатель: Хочу игровую приставку. 2. Помощник: В каталоге есть только столы, кресла и лампы, приставку \
 подобрать не смогу. Что из этого вам нужно? В каком городе и какой бюджет? 3. Покупатель: Азов, нужна лампа
-Ответ: {"categories":["lamp"],"other_items":[],"what_is_unclear":false,"city_said":"Азов","city_id":"azov",\
+Ответ: {"categories":["lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no","city_said":"Азов","city_id":"azov",\
 "budget_said":"none","budget_value":0,"budget_unit":"rub","table_width":[],"chair_adjustable":"any",\
 "lamp_color_temperature":[]}""" % names
 
@@ -180,13 +187,14 @@ def normalize(raw: dict, city_list: list[dict]) -> Needs:
     elif not need.categories:
         need.problem_categories = "missing"
 
+    need.wants_other = raw.get("wants_other") == "yes"
     need.city_said = " ".join(str(raw.get("city_said") or "").split())[:60]
     known = {c["id"] for c in city_list}
     city = raw.get("city_id")
     if city in known:
         need.city_id = city
-    elif city == "several":
-        need.problem_city = "several"
+    elif city in ("several", "another"):
+        need.problem_city = city
     elif city == "other" or (city not in known and need.city_said and city != "none"):
         need.problem_city = "unknown"
     else:
