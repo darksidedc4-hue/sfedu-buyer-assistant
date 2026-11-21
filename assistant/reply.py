@@ -51,6 +51,26 @@ def conditions(need: Needs) -> list[str]:
     return out
 
 
+def understood(need: Needs, city_names: dict[str, str]) -> list[dict]:
+    """Как понят запрос, по пунктам: что, где, за сколько, с какими условиями. known=False: об этом ещё спросим."""
+    out = []
+    what = _join([NAME[c] for c in need.categories]) if need.categories else "не названо"
+    if need.unsupported:
+        what += "; нет в каталоге: " + ", ".join(need.unsupported)
+    out.append({"label": "Что", "text": what, "known": not need.problem_categories})
+    where = {"": city_names.get(need.city_id, need.city_id), "missing": "не назван", "several": "названо несколько",
+             "unknown": "%s, нет в справочнике" % (need.city_said or "?"),
+             "another": "другой, не %s" % (need.city_said or "прежний")}[need.problem_city]
+    out.append({"label": "Где", "text": where, "known": not need.problem_city})
+    money = "без предела" if need.no_limit else {"": "до %s" % rub(need.budget_rub or 0), "missing": "не назван",
+                                                 "unclear": "без числа"}[need.problem_budget]
+    out.append({"label": "Бюджет", "text": money, "known": not need.problem_budget})
+    out += [{"label": "Условие", "text": rule, "known": True} for rule in conditions(need)]
+    if need.wants_other:
+        out.append({"label": "Пожелание", "text": "другие варианты", "known": True})
+    return out
+
+
 def item_text(item: dict) -> str:
     attrs = item.get("attributes") or {}
     title = " ".join(str(item.get("title") or "").split())[:70]

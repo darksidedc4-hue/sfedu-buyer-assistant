@@ -239,6 +239,16 @@ class Normalize(unittest.TestCase):
         self.assertTrue(all({"t2", "l3", "l4", "l5"} & {i["id"] for i in k} for k in again))
         self.assertEqual({i["id"] for i in again[0]}, {"t2", "l3"})
 
+    def test_understood_lists_what_was_extracted(self):
+        need = extract.normalize(raw(categories=["table", "lamp"], other_items=[], budget_value=15, budget_unit="thousand_rub",
+                                     table_width=[{"op": "<=", "value": 1, "unit": "m"}]), CITIES)
+        got = reply.understood(need, NAMES)
+        self.assertEqual([(g["label"], g["text"], g["known"]) for g in got],
+                         [("Что", "стол и лампа", True), ("Где", "Таганрог", True), ("Бюджет", "до 15 000 ₽", True),
+                          ("Условие", "стол не шире 100 см", True)])
+        empty = reply.understood(extract.normalize(raw(categories=[], city_id="none", city_said="", budget_said="vague"), CITIES), NAMES)
+        self.assertEqual([(g["text"], g["known"]) for g in empty], [("не названо", False), ("не назван", False), ("без числа", False)])
+
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},
                                      {"op": "<=", "value": True, "unit": "cm"}, {"op": "<=", "value": 99999, "unit": "cm"}, "мусор"],

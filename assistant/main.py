@@ -32,10 +32,20 @@ def read_request(raw: bytes) -> list[dict]:
 
 
 def answer(messages: list[dict], catalog: list, deadline: float | None = None) -> dict:
-    """Ответ на диалог: модель разбирает условия, остальное делает код."""
+    """Ответ на диалог по контракту: модель разбирает условия, остальное делает код."""
+    return explain(messages, catalog, deadline)[0]
+
+
+def explain(messages: list[dict], catalog: list, deadline: float | None = None) -> tuple[dict, list[dict]]:
+    """Ответ по контракту и то, как понят запрос. Второе нужно только интерфейсу показа: видно, что из слов
+    покупателя получилась структура, по которой идёт подбор. В stdout ./run уходит только первое."""
     need = extract.needs_from_dialogue(messages, deadline)
-    print("условия: %s" % need, file=sys.stderr)
     city_names = {c["id"]: c["name"] for c in extract.cities()}
+    return _decide(need, messages, catalog, city_names), reply.understood(need, city_names)
+
+
+def _decide(need, messages: list[dict], catalog: list, city_names: dict) -> dict:
+    print("условия: %s" % need, file=sys.stderr)
     # пока не известно хоть одно основное условие, комплект не подбираем и ничего не подставляем по умолчанию
     if need.problem_categories or need.problem_city or need.problem_budget:
         # о бюджете уже спрашивали отдельно, а числа так и нет: тот же вопрос слово в слово покупателю не помогает.
