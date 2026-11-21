@@ -27,11 +27,30 @@ def limits_of(category: str, need: Needs) -> list[tuple[str, float]]:
     return need.width_cm if category == "table" else need.kelvin if category == "lamp" else []
 
 
+def order_of(category: str, need: Needs) -> str:
+    """Что покупатель хочет по цене этого товара: пожелание для товара, а без него общее для комплекта."""
+    return need.item_order.get(category) or ("expensive" if need.expensive else "cheap")
+
+
+def mixed(need: Needs) -> bool:
+    """Пожелания по цене названы для отдельных товаров, а не одно на весь комплект."""
+    return any(c in need.item_order for c in need.categories)
+
+
+def score(kit: list[dict], need: Needs) -> int:
+    """Чем меньше, тем лучше комплект отвечает пожеланиям: где просили подороже, цена идёт в плюс комплекту,
+    где подешевле (и где ничего не просили) в минус."""
+    return sum(-i["price_rub"] if order_of(i["category"], need) == "expensive" else i["price_rub"] for i in kit)
+
+
 def fits(item: dict, need: Needs) -> bool:
     """Подходит ли объявление под ограничения своей категории. Ограничена характеристика, а значения в объявлении
     нет: соответствие не подтверждено, объявление не подходит. False и 0 это значения, а не «нет данных»."""
     attrs = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
     category = item.get("category")
+    price = _number(item.get("price_rub"))
+    if not all(price is not None and COMPARE[op](price, bound) for op, bound in need.price_limits.get(category, [])):
+        return False
     if category == "chair":
         if need.adjustable is None:
             return True
@@ -66,13 +85,14 @@ def kits(catalog: list, need: Needs, city_id: str | None = None, shown: frozense
     found = candidates(catalog, need, city_id or need.city_id)
     if not found or any(not items for items in found.values()):
         return []
-    def near(items):
+    def near(category):
+        items = found[category]
         fresh, old = [i for i in items if i["id"] not in shown], [i for i in items if i["id"] in shown]
-        if need.expensive:
+        if order_of(category, need) == "expensive":
             fresh = fresh if len(fresh) <= 2 * PER_WIDE else fresh[:PER_WIDE] + fresh[-PER_WIDE:]
             return fresh + old[-PER_CATEGORY:]
         return fresh[:PER_CATEGORY] + old[:PER_CATEGORY]
-    combos = itertools.product(*(near(found[c]) for c in need.categories))
+    combos = itertools.product(*(near(c) for c in need.categories))
     return sorted((list(k) for k in combos), key=lambda k: (sum(i["price_rub"] for i in k), [i["id"] for i in k]))
 
 
@@ -90,12 +110,11 @@ def options(catalog: list, need: Needs, count: int = 3, shown: frozenset = froze
     pool = [k for k in kits(catalog, need, shown=shown) if need.no_limit or total(k) <= need.budget_rub]
     old = {i["id"] for k in pool for i in k if i["id"] in shown}
     pool = [k for k in pool if any(i["id"] not in old for i in k)]
-    side = 1 if need.expensive else -1          # при равном числе новых товаров берём дороже или дешевле
-    if need.expensive:
-        pool.sort(key=lambda k: (-total(k), [i["id"] for i in k]))
+    # лучший по пожеланиям идёт первым; без пожеланий это просто самый дешёвый
+    pool.sort(key=lambda k: (score(k, need), [i["id"] for i in k]))
     chosen, used = [], set(old)
     while pool and len(chosen) < count:
-        best = max(pool, key=lambda k: (len({i["id"] for i in k} - used), side * total(k))) if chosen or old else pool[0]
+        best = max(pool, key=lambda k: (len({i["id"] for i in k} - used), -score(k, need))) if chosen or old else pool[0]
         chosen.append(best)
         used |= {i["id"] for i in best}
         pool.remove(best)

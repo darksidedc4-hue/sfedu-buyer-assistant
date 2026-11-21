@@ -20,7 +20,8 @@ def item(id_, category, price, city="taganrog", **attrs):
 
 
 def raw(**over):
-    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "wants_other": "no", "price_order": "cheap", "city_said": "Таганрог", "city_id": "taganrog",
+    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "wants_other": "no", "price_order": "cheap", "table_price": "any", "chair_price": "any", "lamp_price": "any",
+            "item_price_limits": [], "city_said": "Таганрог", "city_id": "taganrog",
             "budget_said": "exact", "budget_value": 15000, "budget_unit": "rub", "table_width": [], "chair_adjustable": "any",
             "lamp_color_temperature": []}
     base.update(over)
@@ -265,6 +266,33 @@ class Normalize(unittest.TestCase):
         self.assertEqual((picker.total(best), {i["id"] for i in best}), (7300, {"t7", "l3"}))   # самый дорогой, что влезает в бюджет
         self.assertEqual({i["id"] for i in picker.options(catalog, extract.normalize(raw(categories=["table", "lamp"]), CITIES))[0]}, {"t1", "l1"})
         self.assertIn(("Пожелание", "самое дорогое"), [(g["label"], g["text"]) for g in reply.understood(rich, NAMES)])
+
+    def test_price_wishes_and_limits_per_item(self):
+        catalog = ([item("t%d" % n, "table", n * 1000) for n in range(1, 7)] + [item("c%d" % n, "chair", n * 1000) for n in range(1, 7)]
+                   + [item("l%d" % n, "lamp", n * 100) for n in range(1, 6)])
+        need = extract.normalize(raw(categories=["table", "chair", "lamp"], budget_said="unlimited", budget_value=0,
+                                     table_price="expensive", lamp_price="cheap",
+                                     item_price_limits=[{"item": "chair", "op": ">=", "value": 3, "unit": "thousand_rub"},
+                                                        {"item": "sofa", "op": "<=", "value": 1, "unit": "rub"}]), CITIES)
+        self.assertEqual((need.item_order, need.price_limits), ({"table": "expensive", "lamp": "cheap"}, {"chair": [(">=", 3000.0)]}))
+        kits = picker.options(catalog, need)
+        self.assertEqual([i["id"] for i in kits[0]], ["t6", "c3", "l1"])        # дорогой стол, кресло от 3 000, дешёвая лампа
+        self.assertTrue(all(i["price_rub"] >= 3000 for k in kits for i in k if i["category"] == "chair"))
+        out = reply.ok(need, kits, NAMES)
+        self.assertIn("Комплект по вашим пожеланиям", out["options"][0]["explanation"])
+        self.assertIn("кресло не дешевле 3 000 ₽", out["options"][0]["explanation"])
+        got = [(g["label"], g["text"]) for g in reply.understood(need, NAMES)]
+        self.assertIn(("Пожелание", "стол подороже, лампа подешевле"), got)
+        self.assertIn(("Условие", "кресло не дешевле 3 000 ₽"), got)
+        # бюджет важнее пожеланий: при 5 500 стол берётся самый дорогой из тех, что оставляют место креслу и лампе
+        capped = extract.normalize(raw(categories=["table", "chair", "lamp"], budget_value=5500, table_price="expensive", lamp_price="cheap",
+                                       item_price_limits=[{"item": "chair", "op": ">=", "value": 3000, "unit": "rub"}]), CITIES)
+        best = picker.options(catalog, capped)[0]
+        self.assertEqual(([i["id"] for i in best], picker.total(best)), (["t2", "c3", "l1"], 5100))
+        # граница, под которую нет товара: это препятствие, и оно названо словами
+        hard = extract.normalize(raw(categories=["chair"], item_price_limits=[{"item": "chair", "op": ">", "value": 99, "unit": "thousand_rub"}]), CITIES)
+        self.assertEqual(picker.options(catalog, hard), [])
+        self.assertIn("нет кресла дороже 99 000 ₽", reply.no_match(hard, picker.why_nothing(catalog, hard, list(NAMES)), NAMES)["message"])
 
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},

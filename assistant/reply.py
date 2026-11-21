@@ -10,6 +10,8 @@ from .extract import Needs
 NAME = {"table": "стол", "chair": "кресло", "lamp": "лампа"}
 ACC = {"table": "стол", "chair": "кресло", "lamp": "лампу"}          # что подобрать
 GEN_PL = {"table": "столов", "chair": "кресел", "lamp": "ламп"}      # нет чего
+GEN = {"table": "стола", "chair": "кресла", "lamp": "лампы"}         # нет какого
+PRICE = {"<=": "не дороже", "<": "дешевле", ">=": "не дешевле", ">": "дороже", "=": "ровно за"}
 
 
 def rub(n: int) -> str:
@@ -40,15 +42,22 @@ def limit_text(category: str, limits: list[tuple[str, float]]) -> str:
     return " и ".join(words[op] + " " + _num(value) + unit for op, value in limits)
 
 
-def conditions(need: Needs) -> list[str]:
+def rule_words(category: str, need: Needs) -> list[str]:
+    """Ограничения одного товара словами, без названия товара: характеристика и границы цены."""
     out = []
-    if "table" in need.categories and need.width_cm:
-        out.append("стол " + limit_text("table", need.width_cm))
-    if "chair" in need.categories and need.adjustable is not None:
-        out.append("кресло " + ("с регулировкой высоты" if need.adjustable else "без регулировки высоты"))
-    if "lamp" in need.categories and need.kelvin:
-        out.append("лампа с цветовой температурой " + limit_text("lamp", need.kelvin))
+    if category == "table" and need.width_cm:
+        out.append(limit_text("table", need.width_cm))
+    if category == "chair" and need.adjustable is not None:
+        out.append("с регулировкой высоты" if need.adjustable else "без регулировки высоты")
+    if category == "lamp" and need.kelvin:
+        out.append("с цветовой температурой " + limit_text("lamp", need.kelvin))
+    if need.price_limits.get(category):
+        out.append(" и ".join(PRICE[op] + " " + rub(value) for op, value in need.price_limits[category]))
     return out
+
+
+def conditions(need: Needs) -> list[str]:
+    return [NAME[c] + " " + ", ".join(rule_words(c, need)) for c in need.categories if rule_words(c, need)]
 
 
 def understood(need: Needs, city_names: dict[str, str]) -> list[dict]:
@@ -66,6 +75,9 @@ def understood(need: Needs, city_names: dict[str, str]) -> list[dict]:
                                                  "unclear": "без числа"}[need.problem_budget]
     out.append({"label": "Бюджет", "text": money, "known": not need.problem_budget})
     out += [{"label": "Условие", "text": rule, "known": True} for rule in conditions(need)]
+    wishes = [NAME[c] + (" подороже" if need.item_order[c] == "expensive" else " подешевле") for c in need.categories if c in need.item_order]
+    if wishes:
+        out.append({"label": "Пожелание", "text": ", ".join(wishes), "known": True})
     if need.expensive:
         out.append({"label": "Пожелание", "text": "самое дорогое", "known": True})
     if need.wants_other:
@@ -153,12 +165,17 @@ def ok(need: Needs, kits: list[list[dict]], city_names: dict[str, str], other: b
     for n, kit in enumerate(kits):
         sum_rub = picker.total(kit)
         top, gap = "Самый дорогой" if need.expensive else "Самый дешёвый", sum_rub - picker.total(kits[0])
-        lead = (top + (" из ещё не показанных комплектов" if other else " подходящий комплект")) if n == 0 else \
+        if picker.mixed(need):
+            first = "Комплект по вашим пожеланиям" + (" из ещё не показанных" if other else "")
+        else:
+            first = top + (" из ещё не показанных комплектов" if other else " подходящий комплект")
+        lead = first if n == 0 else \
             "Другой вариант, на %s %s первого" % (rub(abs(gap)), "дороже" if gap > 0 else "дешевле") if gap else "Вариант за те же деньги"
         text = "%s, город %s: %s. Итого %s" % (lead, city, "; ".join(item_text(i) for i in kit), rub(sum_rub))
         if need.no_limit:
-            text += ". Предел по сумме вы не задавали, поэтому варианты идут от %s." % (
-                "дорогого к дешёвому" if need.expensive else "дешёвого к дорогому")
+            text += ". Предел по сумме вы не задавали." if picker.mixed(need) else \
+                ". Предел по сумме вы не задавали, поэтому варианты идут от %s." % (
+                    "дорогого к дешёвому" if need.expensive else "дешёвого к дорогому")
         else:
             text += " при бюджете %s" % rub(need.budget_rub)
             text += ", остаётся %s." % rub(need.budget_rub - sum_rub) if need.budget_rub > sum_rub else ", ровно в бюджет."
@@ -178,9 +195,7 @@ def no_match(need: Needs, why: dict, city_names: dict[str, str]) -> dict:
     if why["absent"]:
         parts.append("В этом городе в каталоге нет %s." % _join([GEN_PL[c] for c in why["absent"]]))
     if why["unfit"]:
-        by = {"table": "стола " + limit_text("table", need.width_cm) if need.width_cm else "",
-              "chair": "кресла " + ("с регулировкой высоты" if need.adjustable else "без регулировки высоты"),
-              "lamp": "лампы с цветовой температурой " + limit_text("lamp", need.kelvin) if need.kelvin else ""}
+        by = {c: GEN[c] + " " + ", ".join(rule_words(c, need)) for c in why["unfit"]}
         parts.append("Здесь нет %s." % _join([by[c] for c in why["unfit"]]))
         for category, (low, high) in why.get("have", {}).items():
             what = "столы шириной" if category == "table" else "лампы с цветовой температурой"
