@@ -17,7 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 KEYS = ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY", "LLM_USER_AGENT")
 CALL_TIMEOUT = 60      # секунд на один вызов: весь запуск run по контракту должен уложиться в 120
-TRIES = 3              # всего попыток; повторяем только то, что может пройти со второго раза (429, 5xx, обрыв)
+TRIES = 3              # всего попыток; повторяем только то, что может пройти со второго раза (5xx, обрыв)
+BUSY_TRIES = 5         # отдельный счёт для 429: лимит команды (20 обращений в минуту) проходит сам, его надо переждать
 
 
 class LLMError(Exception):
@@ -64,8 +65,9 @@ def ask(messages: list[dict], schema: dict, name: str, max_tokens: int = 400, de
     })
     opener = urllib.request.build_opener(_NoRedirect)
     problem = "нет попыток"
-    for attempt in range(1, TRIES + 1):
-        wait = 2.0
+    failed = busy = 0
+    while True:
+        wait, limited = 2.0, False
         try:
             with opener.open(request, timeout=CALL_TIMEOUT) as response:
                 raw = response.read(1_000_000)
@@ -82,14 +84,18 @@ def ask(messages: list[dict], schema: dict, name: str, max_tokens: int = 400, de
             problem = "HTTP %s: %s" % (e.code, " ".join(text.split())[:300])
             if e.code not in (429, 500, 502, 503, 504):
                 raise LLMError(problem)   # неверный ключ, срок, параметры: повтор не поможет
+            limited = e.code == 429
+            if limited:
+                wait = 8.0 * (busy + 1)   # окно лимита скользящая минута: каждая следующая пауза длиннее
             try:
-                wait = min(float(e.headers.get("Retry-After") or wait), 15.0)
+                wait = min(float(e.headers.get("Retry-After") or wait), 30.0)
             except ValueError:
                 pass
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             problem = "нет связи с API модели: %s" % e
-        print("модель: попытка %d не удалась: %s" % (attempt, problem), file=sys.stderr)
-        if attempt == TRIES or (deadline is not None and time.monotonic() + wait + CALL_TIMEOUT / 2 > deadline):
+        busy, failed = busy + limited, failed + (not limited)
+        print("модель: попытка %d не удалась: %s" % (busy + failed, problem), file=sys.stderr)
+        if failed >= TRIES or busy >= BUSY_TRIES or (deadline is not None and time.monotonic() + wait + CALL_TIMEOUT / 2 > deadline):
             break
         time.sleep(wait)
     raise LLMError(problem)

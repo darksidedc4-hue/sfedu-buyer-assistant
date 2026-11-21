@@ -20,8 +20,16 @@ def _num(value: float) -> str:
     return str(int(value)) if float(value).is_integer() else ("%.1f" % value).replace(".", ",")
 
 
-def _join(parts: list[str]) -> str:
-    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " и " + parts[-1]
+def _join(parts: list[str], last: str = "и") -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " " + last + " " + parts[-1]
+
+
+def asked_budget_only(text: str) -> bool:
+    """Прошлая реплика помощника спрашивала только о бюджете (по нашим же формулировкам вопросов)."""
+    low = text.lower()
+    return ("бюджет" in low or "верхний предел" in low) and not any(
+        mark in low for mark in ("в каком городе", "в каком из них", "какой из них", "что нужно подобрать", "что из этого",
+                                 "оставить в подборе"))
 
 
 def limit_text(category: str, limits: list[tuple[str, float]]) -> str:
@@ -62,7 +70,7 @@ def clarify(need: Needs, city_names: dict[str, str], budget_again: bool = False,
 
     budget_again: о бюджете уже спрашивали в прошлой реплике. Подставлять сумму за покупателя контракт запрещает,
     поэтому вопрос остаётся, но объясняет причину и даёт ориентир floor: цену самого дешёвого комплекта в каталоге."""
-    cities = _join(list(city_names.values()))
+    cities = _join(list(city_names.values()), "или")
     questions = []
     if need.problem_categories == "unsupported":
         extra = _join(["«%s»" % x for x in need.unsupported])
@@ -87,7 +95,8 @@ def clarify(need: Needs, city_names: dict[str, str], budget_again: bool = False,
             if floor is not None:
                 text += " Для ориентира: самый дешёвый подходящий комплект (%s) в городе %s стоит %s." % (
                     _join([NAME[c] for c in need.categories]), city_names.get(need.city_id, need.city_id), rub(floor))
-            text += " Назовите верхний предел одним числом, например «%s»." % rub(floor if floor is not None else 10000)
+            text += " Какой верхний предел поставить? Достаточно одного числа, например «%s»." % rub(
+                floor if floor is not None else 10000)
         else:
             lead = "Чтобы уложиться в сумму, мне нужно число. " if need.problem_budget == "unclear" else ""
             text = lead + "Какой общий бюджет на %s, в рублях?" % what

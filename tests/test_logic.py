@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from assistant import extract, picker, reply  # noqa: E402
+from assistant import extract, llm, picker, reply  # noqa: E402
 from assistant.extract import Needs  # noqa: E402
 
 CITIES = extract.cities()
@@ -105,6 +105,45 @@ class Options(unittest.TestCase):
             self.assertNotIn(id_, text["message"])
 
 
+class Limits(unittest.TestCase):
+    """Лимит шлюза пережидается, а не превращается в отказ; прочие сбои повторяются ограниченно."""
+
+    def run_with(self, codes, deadline=None):
+        import email.message
+        import urllib.error
+        from unittest import mock
+        calls, pauses = [], []
+
+        class Opener:
+            def open(self, request, timeout=None):
+                code = codes[len(calls)] if len(calls) < len(codes) else 200
+                calls.append(code)
+                if code != 200:
+                    raise urllib.error.HTTPError("u", code, "x", email.message.Message(), __import__("io").BytesIO(b"{}"))
+                body = json.dumps({"choices": [{"message": {"content": "{\"a\": 1}"}}]}).encode()
+                return mock.MagicMock(__enter__=lambda s: mock.MagicMock(read=lambda n: body), __exit__=lambda *a: False)
+
+        conf = {"LLM_BASE_URL": "http://x/v1", "LLM_MODEL": "m", "LLM_API_KEY": "k", "LLM_USER_AGENT": "t"}
+        with mock.patch.object(llm, "settings", lambda: conf), mock.patch.object(llm.urllib.request, "build_opener", lambda *a: Opener()), \
+                mock.patch.object(llm.time, "sleep", pauses.append):
+            try:
+                return llm.ask([], {}, "n", deadline=deadline), calls, pauses
+            except llm.LLMError:
+                return None, calls, pauses
+
+    def test_rate_limit_is_waited_out(self):
+        got, calls, pauses = self.run_with([429, 429, 429, 429])
+        self.assertEqual((got, len(calls), pauses), ({"a": 1}, 5, [8.0, 16.0, 24.0, 30.0]))
+        self.assertIsNone(self.run_with([429] * 9)[0])                      # лимит не уходит: честный отказ, а не зависание
+        self.assertEqual(len(self.run_with([429] * 9)[1]), llm.BUSY_TRIES)
+
+    def test_other_failures_keep_the_short_retry(self):
+        got, calls, pauses = self.run_with([500, 502, 503, 500])
+        self.assertEqual((got, len(calls), pauses), (None, llm.TRIES, [2.0, 2.0]))
+        self.assertEqual(len(self.run_with([401])[1]), 1)                    # неверный ключ не повторяем
+        self.assertEqual(len(self.run_with([429, 429], deadline=llm.time.monotonic() + 20)[1]), 1)   # ждать некогда
+
+
 class Normalize(unittest.TestCase):
     def test_units_and_budget(self):
         need = extract.normalize(raw(table_width=[{"op": "<=", "value": 1.2, "unit": "m"}, {"op": ">", "value": 900, "unit": "mm"}],
@@ -137,6 +176,13 @@ class Normalize(unittest.TestCase):
         self.assertIn("Таганрог", again["questions"][0]["text"])
         self.assertNotIn("options", again)
         self.assertIn("10 000 ₽", reply.clarify(need, NAMES, True)["questions"][0]["text"])   # ориентира нет: пример общий
+        # настойчивый текст только после вопроса об одном бюджете: на общий вопрос человек отвечает по очереди
+        self.assertTrue(reply.asked_budget_only(first))
+        self.assertTrue(reply.asked_budget_only(again["questions"][0]["text"]))
+        nothing = extract.normalize(raw(categories=[], city_id="none", city_said="", budget_said="none"), CITIES)
+        everything = " ".join(q["text"] for q in reply.clarify(nothing, NAMES)["questions"])
+        self.assertFalse(reply.asked_budget_only(everything))
+        self.assertIn("Ростов-на-Дону или Азов", everything)
 
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},
