@@ -38,7 +38,14 @@ def answer(messages: list[dict], catalog: list, deadline: float | None = None) -
     city_names = {c["id"]: c["name"] for c in extract.cities()}
     # пока не известно хоть одно основное условие, комплект не подбираем и ничего не подставляем по умолчанию
     if need.problem_categories or need.problem_city or need.problem_budget:
-        return reply.clarify(need, city_names)
+        # о бюджете уже спрашивали, а числа так и нет: тот же вопрос слово в слово покупателю не помогает
+        said = [m["text"] for m in messages if m["role"] == "assistant"]
+        again = bool(said) and "бюджет" in said[-1].lower()
+        floor = None
+        if again and need.categories and need.city_id and not need.problem_categories:
+            cheapest = picker.kits(catalog, need)
+            floor = picker.total(cheapest[0]) if cheapest else None
+        return reply.clarify(need, city_names, again, floor)
     kits = picker.options(catalog, need)
     if kits:
         return reply.ok(need, kits, city_names)

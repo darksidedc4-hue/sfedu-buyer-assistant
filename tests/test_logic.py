@@ -127,6 +127,17 @@ class Normalize(unittest.TestCase):
         self.assertEqual((need.problem_categories, need.problem_city, need.problem_budget), ("missing", "missing", "missing"))
         self.assertEqual(extract.normalize(raw(city_id="several"), CITIES).problem_city, "several")
 
+    def test_repeated_budget_question_explains_and_gives_a_floor(self):
+        need = extract.normalize(raw(categories=["chair", "lamp"], budget_said="vague", budget_value=0), CITIES)
+        first = reply.clarify(need, NAMES)["questions"][0]["text"]
+        again = reply.clarify(need, NAMES, True, 5300)
+        self.assertEqual([q["field"] for q in again["questions"]], ["budget_rub"])
+        self.assertNotEqual(again["questions"][0]["text"], first)
+        self.assertIn("5 300 ₽", again["questions"][0]["text"])
+        self.assertIn("Таганрог", again["questions"][0]["text"])
+        self.assertNotIn("options", again)
+        self.assertIn("10 000 ₽", reply.clarify(need, NAMES, True)["questions"][0]["text"])   # ориентира нет: пример общий
+
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},
                                      {"op": "<=", "value": True, "unit": "cm"}, {"op": "<=", "value": 99999, "unit": "cm"}, "мусор"],

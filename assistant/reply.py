@@ -57,8 +57,11 @@ def item_text(item: dict) -> str:
     return "%s «%s» (%s)" % (NAME[item["category"]], title, ", ".join(facts))
 
 
-def clarify(need: Needs, city_names: dict[str, str]) -> dict:
-    """Вопросы обо всех недостающих основных условиях разом, по одному на поле."""
+def clarify(need: Needs, city_names: dict[str, str], budget_again: bool = False, floor: int | None = None) -> dict:
+    """Вопросы обо всех недостающих основных условиях разом, по одному на поле.
+
+    budget_again: о бюджете уже спрашивали в прошлой реплике. Подставлять сумму за покупателя контракт запрещает,
+    поэтому вопрос остаётся, но объясняет причину и даёт ориентир floor: цену самого дешёвого комплекта в каталоге."""
     cities = _join(list(city_names.values()))
     questions = []
     if need.problem_categories == "unsupported":
@@ -79,8 +82,16 @@ def clarify(need: Needs, city_names: dict[str, str]) -> dict:
         questions.append({"field": "city_id", "text": "В каком городе вы заберёте покупку: %s?" % cities})
     if need.problem_budget:
         what = _join([ACC[c] for c in need.categories]) if need.categories else "весь комплект"
-        lead = "Чтобы уложиться в сумму, мне нужно число. " if need.problem_budget == "unclear" else ""
-        questions.append({"field": "budget_rub", "text": lead + "Какой общий бюджет на %s, в рублях?" % what})
+        if budget_again:
+            text = "Без суммы подобрать не могу: бюджет за вас я не выбираю, иначе могу предложить то, что вам не по карману."
+            if floor is not None:
+                text += " Для ориентира: самый дешёвый подходящий комплект (%s) в городе %s стоит %s." % (
+                    _join([NAME[c] for c in need.categories]), city_names.get(need.city_id, need.city_id), rub(floor))
+            text += " Назовите верхний предел одним числом, например «%s»." % rub(floor if floor is not None else 10000)
+        else:
+            lead = "Чтобы уложиться в сумму, мне нужно число. " if need.problem_budget == "unclear" else ""
+            text = lead + "Какой общий бюджет на %s, в рублях?" % what
+        questions.append({"field": "budget_rub", "text": text})
     return {"status": "clarify", "questions": questions}
 
 
