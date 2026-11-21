@@ -20,7 +20,7 @@ def item(id_, category, price, city="taganrog", **attrs):
 
 
 def raw(**over):
-    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "wants_other": "no", "city_said": "Таганрог", "city_id": "taganrog",
+    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "wants_other": "no", "price_order": "cheap", "city_said": "Таганрог", "city_id": "taganrog",
             "budget_said": "exact", "budget_value": 15000, "budget_unit": "rub", "table_width": [], "chair_adjustable": "any",
             "lamp_color_temperature": []}
     base.update(over)
@@ -248,6 +248,23 @@ class Normalize(unittest.TestCase):
                           ("Условие", "стол не шире 100 см", True)])
         empty = reply.understood(extract.normalize(raw(categories=[], city_id="none", city_said="", budget_said="vague"), CITIES), NAMES)
         self.assertEqual([(g["text"], g["known"]) for g in empty], [("не названо", False), ("не назван", False), ("без числа", False)])
+
+    def test_most_expensive_on_request(self):
+        catalog = [item("t%d" % n, "table", n * 1000) for n in range(1, 41)] + [item("l%d" % n, "lamp", n * 100) for n in range(1, 6)]
+        rich = extract.normalize(raw(categories=["table", "lamp"], budget_said="unlimited", budget_value=0, price_order="expensive"), CITIES)
+        self.assertTrue(rich.expensive)
+        kits = picker.options(catalog, rich)
+        self.assertEqual({i["id"] for i in kits[0]}, {"t40", "l5"})                       # самый дорогой комплект каталога
+        self.assertTrue(picker.total(kits[0]) >= picker.total(kits[1]) >= picker.total(kits[2]))
+        out = reply.ok(rich, kits, NAMES)
+        self.assertIn("Самый дорогой подходящий комплект", out["options"][0]["explanation"])
+        self.assertIn("дешевле первого", out["options"][1]["explanation"])
+        self.assertIn("от дорогого к дешёвому", out["options"][0]["explanation"])
+        capped = extract.normalize(raw(categories=["table", "lamp"], budget_value=7300, price_order="expensive"), CITIES)
+        best = picker.options(catalog, capped)[0]
+        self.assertEqual((picker.total(best), {i["id"] for i in best}), (7300, {"t7", "l3"}))   # самый дорогой, что влезает в бюджет
+        self.assertEqual({i["id"] for i in picker.options(catalog, extract.normalize(raw(categories=["table", "lamp"]), CITIES))[0]}, {"t1", "l1"})
+        self.assertIn(("Пожелание", "самое дорогое"), [(g["label"], g["text"]) for g in reply.understood(rich, NAMES)])
 
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},

@@ -66,6 +66,8 @@ def understood(need: Needs, city_names: dict[str, str]) -> list[dict]:
                                                  "unclear": "без числа"}[need.problem_budget]
     out.append({"label": "Бюджет", "text": money, "known": not need.problem_budget})
     out += [{"label": "Условие", "text": rule, "known": True} for rule in conditions(need)]
+    if need.expensive:
+        out.append({"label": "Пожелание", "text": "самое дорогое", "known": True})
     if need.wants_other:
         out.append({"label": "Пожелание", "text": "другие варианты", "known": True})
     return out
@@ -150,11 +152,13 @@ def ok(need: Needs, kits: list[list[dict]], city_names: dict[str, str], other: b
     options = []
     for n, kit in enumerate(kits):
         sum_rub = picker.total(kit)
-        lead = ("Самый дешёвый из ещё не показанных комплектов" if other else "Самый дешёвый подходящий комплект") if n == 0 else "Другой вариант, на %s дороже первого" % rub(
-            sum_rub - picker.total(kits[0])) if sum_rub > picker.total(kits[0]) else "Вариант за те же деньги"
+        top, gap = "Самый дорогой" if need.expensive else "Самый дешёвый", sum_rub - picker.total(kits[0])
+        lead = (top + (" из ещё не показанных комплектов" if other else " подходящий комплект")) if n == 0 else \
+            "Другой вариант, на %s %s первого" % (rub(abs(gap)), "дороже" if gap > 0 else "дешевле") if gap else "Вариант за те же деньги"
         text = "%s, город %s: %s. Итого %s" % (lead, city, "; ".join(item_text(i) for i in kit), rub(sum_rub))
         if need.no_limit:
-            text += ". Предел по сумме вы не задавали, поэтому варианты идут от дешёвого к дорогому."
+            text += ". Предел по сумме вы не задавали, поэтому варианты идут от %s." % (
+                "дорогого к дешёвому" if need.expensive else "дешёвого к дорогому")
         else:
             text += " при бюджете %s" % rub(need.budget_rub)
             text += ", остаётся %s." % rub(need.budget_rub - sum_rub) if need.budget_rub > sum_rub else ", ровно в бюджет."

@@ -14,6 +14,8 @@ from .extract import CATEGORIES, Needs
 COMPARE = {"<=": operator.le, "<": operator.lt, ">=": operator.ge, ">": operator.gt, "=": operator.eq}
 ATTRIBUTE = {"table": "width_cm", "lamp": "color_temperature_k"}   # числовая характеристика категории
 PER_CATEGORY = 8      # столько самых дешёвых подходящих товаров каждой категории идёт в перебор комплектов
+PER_WIDE = 15         # когда просят самое дорогое: столько с дешёвого и столько с дорогого края, чтобы найти и самый
+                      # дорогой комплект вообще, и самый дорогой из тех, что укладываются в бюджет
 
 
 def _number(value):
@@ -64,7 +66,12 @@ def kits(catalog: list, need: Needs, city_id: str | None = None, shown: frozense
     found = candidates(catalog, need, city_id or need.city_id)
     if not found or any(not items for items in found.values()):
         return []
-    near = lambda items: [i for i in items if i["id"] not in shown][:PER_CATEGORY] + [i for i in items if i["id"] in shown][:PER_CATEGORY]
+    def near(items):
+        fresh, old = [i for i in items if i["id"] not in shown], [i for i in items if i["id"] in shown]
+        if need.expensive:
+            fresh = fresh if len(fresh) <= 2 * PER_WIDE else fresh[:PER_WIDE] + fresh[-PER_WIDE:]
+            return fresh + old[-PER_CATEGORY:]
+        return fresh[:PER_CATEGORY] + old[:PER_CATEGORY]
     combos = itertools.product(*(near(found[c]) for c in need.categories))
     return sorted((list(k) for k in combos), key=lambda k: (sum(i["price_rub"] for i in k), [i["id"] for i in k]))
 
@@ -83,9 +90,12 @@ def options(catalog: list, need: Needs, count: int = 3, shown: frozenset = froze
     pool = [k for k in kits(catalog, need, shown=shown) if need.no_limit or total(k) <= need.budget_rub]
     old = {i["id"] for k in pool for i in k if i["id"] in shown}
     pool = [k for k in pool if any(i["id"] not in old for i in k)]
+    side = 1 if need.expensive else -1          # при равном числе новых товаров берём дороже или дешевле
+    if need.expensive:
+        pool.sort(key=lambda k: (-total(k), [i["id"] for i in k]))
     chosen, used = [], set(old)
     while pool and len(chosen) < count:
-        best = max(pool, key=lambda k: (len({i["id"] for i in k} - used), -total(k))) if chosen or old else pool[0]
+        best = max(pool, key=lambda k: (len({i["id"] for i in k} - used), side * total(k))) if chosen or old else pool[0]
         chosen.append(best)
         used |= {i["id"] for i in best}
         pool.remove(best)
