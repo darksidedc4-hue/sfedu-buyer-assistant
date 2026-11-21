@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Запуск по контракту кейса: ./run --catalog /путь/catalog.json < request.json > response.json
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "$DIR/assistant/main.py" "$@"
