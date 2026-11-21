@@ -184,6 +184,20 @@ class Normalize(unittest.TestCase):
         self.assertFalse(reply.asked_budget_only(everything))
         self.assertIn("Ростов-на-Дону или Азов", everything)
 
+    def test_no_limit_is_the_buyers_choice(self):
+        need = extract.normalize(raw(budget_said="unlimited", budget_value=0), CITIES)
+        self.assertEqual((need.no_limit, need.budget_rub, need.problem_budget), (True, None, ""))
+        catalog = [item("a", "table", 900000), item("b", "table", 100), item("c", "table", 5000, city="azov")]
+        kits = picker.options(catalog, need)
+        self.assertEqual([[i["id"] for i in k] for k in kits], [["b"], ["a"]])        # цена не отсекает, чужой город отсекает
+        out = reply.ok(need, kits, NAMES)
+        self.assertEqual([o["total_rub"] for o in out["options"]], [100, 900000])
+        self.assertIn("Предел по сумме вы не задавали", out["options"][0]["explanation"])
+        nothing = reply.no_match(need, picker.why_nothing([], need, list(NAMES)), NAMES)
+        self.assertNotIn("в пределах", nothing["message"])
+        self.assertNotIn("бюджет", nothing["message"])
+        self.assertEqual(extract.normalize(raw(budget_said="vague", budget_value=0), CITIES).problem_budget, "unclear")
+
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},
                                      {"op": "<=", "value": True, "unit": "cm"}, {"op": "<=", "value": 99999, "unit": "cm"}, "мусор"],

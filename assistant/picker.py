@@ -75,7 +75,7 @@ def options(catalog: list, need: Needs, count: int = 3) -> list[list[dict]]:
     """До трёх комплектов в бюджете. Первый самый дешёвый. Каждый следующий выбирается так, чтобы в нём было как
     можно больше товаров, которых не было в предыдущих вариантах (при равенстве берём дешевле): три комплекта,
     отличающиеся одной лампой, покупателю мало что дают."""
-    pool = [k for k in kits(catalog, need) if total(k) <= need.budget_rub]
+    pool = [k for k in kits(catalog, need) if need.no_limit or total(k) <= need.budget_rub]
     chosen, used = [], set()
     while pool and len(chosen) < count:
         best = max(pool, key=lambda k: (len({i["id"] for i in k} - used), -total(k))) if chosen else pool[0]
@@ -100,7 +100,7 @@ def why_nothing(catalog: list, need: Needs, city_ids: list[str]) -> dict:
     for city in city_ids:
         if city != need.city_id:
             other = kits(catalog, need, city)
-            if other and total(other[0]) <= need.budget_rub:
+            if other and (need.no_limit or total(other[0]) <= need.budget_rub):
                 elsewhere[city] = total(other[0])
     # что в городе есть на самом деле по ограниченной характеристике: покупателю легче решить, чем поступиться
     have = {}

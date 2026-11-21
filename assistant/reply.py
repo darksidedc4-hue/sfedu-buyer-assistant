@@ -112,9 +112,12 @@ def ok(need: Needs, kits: list[list[dict]], city_names: dict[str, str]) -> dict:
         sum_rub = picker.total(kit)
         lead = "Самый дешёвый подходящий комплект" if n == 0 else "Другой вариант, на %s дороже первого" % rub(
             sum_rub - picker.total(kits[0])) if sum_rub > picker.total(kits[0]) else "Вариант за те же деньги"
-        text = "%s, город %s: %s. Итого %s при бюджете %s" % (lead, city, "; ".join(item_text(i) for i in kit), rub(sum_rub),
-                                                              rub(need.budget_rub))
-        text += ", остаётся %s." % rub(need.budget_rub - sum_rub) if need.budget_rub > sum_rub else ", ровно в бюджет."
+        text = "%s, город %s: %s. Итого %s" % (lead, city, "; ".join(item_text(i) for i in kit), rub(sum_rub))
+        if need.no_limit:
+            text += ". Предел по сумме вы не задавали, поэтому варианты идут от дешёвого к дорогому."
+        else:
+            text += " при бюджете %s" % rub(need.budget_rub)
+            text += ", остаётся %s." % rub(need.budget_rub - sum_rub) if need.budget_rub > sum_rub else ", ровно в бюджет."
         if rules:
             text += " Ваши условия соблюдены: %s." % "; ".join(rules)
         options.append({"listing_ids": [i["id"] for i in kit], "total_rub": sum_rub, "explanation": text})
@@ -125,7 +128,9 @@ def no_match(need: Needs, why: dict, city_names: dict[str, str]) -> dict:
     city = city_names.get(need.city_id, need.city_id)
     wanted = _join([ACC[c] for c in need.categories])
     rules = conditions(need)
-    parts = ["Собрать комплект (%s) в городе %s в пределах %s не получается." % (wanted, city, rub(need.budget_rub))]
+    limit = "" if need.no_limit else " в пределах %s" % rub(need.budget_rub)
+    over = not need.no_limit and why["cheapest"] is not None and why["cheapest"] > need.budget_rub
+    parts = ["Собрать комплект (%s) в городе %s%s не получается." % (wanted, city, limit)]
     if why["absent"]:
         parts.append("В этом городе в каталоге нет %s." % _join([GEN_PL[c] for c in why["absent"]]))
     if why["unfit"]:
@@ -138,16 +143,16 @@ def no_match(need: Needs, why: dict, city_names: dict[str, str]) -> dict:
             unit = "см" if category == "table" else "К"
             parts.append("В наличии %s %s." % (what, ("%s %s" % (_num(low), unit)) if low == high else
                                                "от %s до %s %s" % (_num(low), _num(high), unit)))
-    if why["cheapest"] is not None and why["cheapest"] > need.budget_rub:
+    if over:
         parts.append("Самый дешёвый комплект под ваши условия стоит %s, это на %s больше бюджета."
                      % (rub(why["cheapest"]), rub(why["cheapest"] - need.budget_rub)))
     tips = []
-    if why["cheapest"] is not None and why["cheapest"] > need.budget_rub:
+    if over:
         tips.append("поднять бюджет до %s" % rub(why["cheapest"]))
     if why["elsewhere"]:
         tips.append("забрать в другом городе: " + _join(["%s (от %s)" % (city_names.get(c, c), rub(p))
                                                          for c, p in sorted(why["elsewhere"].items(), key=lambda x: x[1])]))
-    if rules and (why["unfit"] or why["cheapest"] is None or why["cheapest"] > need.budget_rub):
+    if rules and (why["unfit"] or why["cheapest"] is None or over):
         tips.append("смягчить условие (%s)" % "; ".join(rules))
     if len(need.categories) > 1:
         tips.append("убрать что-то из комплекта")

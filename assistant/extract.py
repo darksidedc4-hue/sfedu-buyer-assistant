@@ -36,6 +36,7 @@ class Needs:
     city_said: str = ""
     problem_city: str = ""              # "", "missing", "unknown", "several"
     budget_rub: int | None = None
+    no_limit: bool = False              # покупатель сам отказался от предела по сумме: это его решение, а не подстановка
     problem_budget: str = ""            # "", "missing", "unclear"
     width_cm: list[tuple[str, float]] = field(default_factory=list)
     kelvin: list[tuple[str, float]] = field(default_factory=list)
@@ -55,7 +56,7 @@ def schema(city_ids: list[str]) -> dict:
             "what_is_unclear": {"type": "boolean"},
             "city_said": {"type": "string"},
             "city_id": {"type": "string", "enum": city_ids + ["other", "several", "none"]},
-            "budget_said": {"type": "string", "enum": ["exact", "vague", "none"]},
+            "budget_said": {"type": "string", "enum": ["exact", "unlimited", "vague", "none"]},
             "budget_value": {"type": "number", "minimum": 0},
             "budget_unit": {"type": "string", "enum": ["rub", "thousand_rub", "million_rub"]},
             "table_width": {"type": "array", "items": dict(limit, properties=dict(
@@ -95,7 +96,12 @@ city_id: идентификатор города из справочника (%s
 несколько городов на выбор и не ясно, какой. none: город не назван.
 
 budget_said: exact, если назван общий предел в деньгах; vague, если о деньгах сказано без числа («недорого», \
-«подешевле», «в разумных пределах») или названа вилка без верхнего предела; none, если о бюджете ничего нет.
+«подешевле», «в разумных пределах») или названа вилка без верхнего предела; none, если о бюджете ничего нет. \
+unlimited только в двух случаях. Первый: покупатель прямо сказал, что предела нет («бюджет не ограничен», «любой \
+бюджет», «цена не важна», «деньги не вопрос»). Второй: помощник в диалоге уже спрашивал о бюджете, а покупатель в \
+ответ числа не назвал и попросил просто показать варианты («предложи варианты, я разберусь», «покажи, что есть», \
+«не знаю, показывай»). Если помощник о бюджете ещё не спрашивал, просьба показать варианты это none. «Недорого» и \
+«подешевле» всегда vague, даже в ответ на вопрос. Если позже покупатель назвал число, это exact.
 budget_value и budget_unit: число и единица, как сказано. «15 тысяч», «15к», «15 т.р.» это 15 и thousand_rub; \
 «15 000 ₽» это 15000 и rub; «полтора миллиона» это 1.5 и million_rub. Если budget_said не exact, ставь 0 и rub. \
 Бюджет общий на весь комплект. Ноль рублей тоже точный бюджет.
@@ -191,6 +197,8 @@ def normalize(raw: dict, city_list: list[dict]) -> Needs:
     value = raw.get("budget_value")
     if said == "exact" and isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
         need.budget_rub = int(round(value * scale))
+    elif said == "unlimited":
+        need.no_limit = True
     else:
         need.problem_budget = "unclear" if said == "vague" else "missing"
 
