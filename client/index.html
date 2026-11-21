@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#16181c">
+<title>Помощник по Авито</title>
+<link rel="stylesheet" href="app.css">
+<script src="theme.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Помощник по Авито</h1>
+    <p id="status" class="status"><i class="dot" aria-hidden="true"></i><span id="statusText"></span></p>
+  </header>
+
+  <div class="seg modes" id="modes" role="tablist" aria-label="Режим помощника" hidden>
+    <i class="thumb" aria-hidden="true"></i>
+    <button type="button" role="tab" data-mode="hack">Хакатон</button>
+    <button type="button" role="tab" data-mode="avito">Поиск по Авито</button>
+  </div>
+
+  <section id="pairBox" class="card enter" hidden>
+    <h2>Активация</h2>
+    <p>Откройте бота OUIPN в Telegram, вкладку «Авито», и нажмите «Скопировать код». Вставьте код сюда. Поиск работает и без кода; с кодом добавляются слежка за ценой и подача объявлений.</p>
+    <textarea id="code" name="code" rows="3" placeholder="OUIPN-AVITO:…" spellcheck="false" autocomplete="off" aria-label="Код активации"></textarea>
+    <button id="pair" class="btn">Активировать</button>
+    <p id="pairMsg" class="hint"></p>
+  </section>
+
+  <section id="work" hidden>
+    <section id="webNote" class="card warned" hidden>
+      <span class="pill warn"><i class="dot"></i>Расширение не на связи</span>
+      <p>Поиск, слежку и продажу выполняет Chrome с расширением OUIPN: страницы Авито читает оно. Откройте Chrome на компьютере, где расширение установлено, или <a href="https://ouipn.ru/avito" target="_blank" rel="noopener">установите его</a>. Режим «Хакатон» работает и без расширения.</p>
+    </section>
+    <div class="seg tabs" id="tabs" role="tablist" aria-label="Разделы помощника">
+      <i class="thumb" aria-hidden="true"></i>
+      <button type="button" role="tab" data-tab="search">Поиск</button>
+      <button type="button" role="tab" data-tab="watch">Слежка<span id="tabCount" class="count" hidden></span></button>
+      <button type="button" role="tab" data-tab="sell">Продажа</button>
+    </div>
+
+    <div id="tabSearch" class="pane">
+      <form id="form" class="card enter">
+        <label for="city">Город, необязательно</label>
+        <input id="city" name="city" type="text" maxlength="60" autocomplete="off" placeholder="Пусто: искать по всем регионам">
+        <label for="text">Что ищем</label>
+        <textarea id="text" name="query" rows="3" maxlength="400" autocomplete="off" placeholder="Товар или характеристики, например: iPhone 15 Pro, без царапин, до 60 тысяч…"></textarea>
+        <div class="chips small tries" data-fill="text" aria-label="Примеры запросов">
+          <button type="button">iPhone 15 Pro, 256 ГБ</button>
+          <button type="button">велосипед горный до 20 тысяч</button>
+          <button type="button">диван угловой</button>
+        </div>
+        <label class="check"><input id="private" type="checkbox"> Только частные продавцы, без магазинов</label>
+        <button id="go" class="btn full" type="submit">Найти</button>
+      </form>
+      <div id="login"></div>
+      <div id="out"></div>
+      <section id="watchBox" class="card enter" hidden>
+        <h2>Следить за ценой</h2>
+        <p id="watchHint" class="hint"></p>
+        <p class="hint">Назовите цену, за которую готовы купить. Помощник будет сам проверять Авито, находки появятся на вкладке «Слежка», а на значке расширения загорится их число. Проверяет ваш браузер, поэтому слежка идёт, пока Chrome открыт.</p>
+        <label for="target">Ваша цена вместе с доставкой, ₽</label>
+        <input id="target" class="price" type="text" inputmode="numeric" maxlength="11" autocomplete="off" placeholder="32 000">
+        <p id="watchGap" class="hint"></p>
+        <span class="lbl">Как часто проверять</span>
+        <div class="chips" id="every">
+          <button type="button" data-every="1">1 мин</button>
+          <button type="button" data-every="2">2 мин</button>
+          <button type="button" data-every="5">5 мин</button>
+          <button type="button" data-every="15" class="on">15 мин</button>
+          <button type="button" data-every="30">30 мин</button>
+          <button type="button" data-every="60">час</button>
+        </div>
+        <p id="everyHint" class="hint" hidden>Чем чаще проверка, тем вероятнее Авито попросит подтвердить, что вы не робот. Проверку проходите вы, слежка в это время ждёт.</p>
+        <label class="check"><input id="favBox" type="checkbox" checked> Добавлять подходящие объявления в избранное Авито</label>
+        <p class="hint">Тогда они будут под рукой в приложении Авито на телефоне, и о снижении цены сможет сообщить сам Авито, если в приложении такие уведомления включены.</p>
+        <button id="watch" class="btn" type="button">Следить</button>
+        <p id="watchMsg" class="hint" role="alert"></p>
+      </section>
+      <div id="list"></div>
+      <div id="blocked"></div>
+    </div>
+
+    <div id="tabWatch" class="pane" hidden>
+      <section class="card">
+        <label class="check"><input id="tgBox" class="switch" type="checkbox"> Писать о находках в Telegram</label>
+        <p class="hint">Бот OUIPN пришлёт находку сообщением со ссылкой. Число на значке расширения горит в любом случае.</p>
+      </section>
+      <div id="watches"></div>
+      <section id="watchEmpty" class="card" hidden>
+        <h2>Слежек пока нет</h2>
+        <p class="hint">Слежка ждёт вашу цену. Найдите товар на вкладке «Поиск», под результатами назовите цену, за которую готовы купить, и помощник будет сам проверять Авито. Находки появятся здесь.</p>
+        <button class="btn ghost" type="button" data-act="tab" data-tab="search">Перейти к поиску</button>
+      </section>
+    </div>
+
+    <div id="tabSell" class="pane" hidden>
+      <form id="sellForm" class="card enter">
+        <label for="sellName">Что продаёте</label>
+        <input id="sellName" name="item" type="text" maxlength="120" autocomplete="off" placeholder="Например: iPhone 13, 128 ГБ, синий…">
+        <label for="sellDetails">Подробности, если есть</label>
+        <textarea id="sellDetails" name="details" rows="3" maxlength="1500" autocomplete="off" placeholder="Состояние, комплект, дефекты. В объявление попадёт только то, что вы сказали…"></textarea>
+        <label for="sellPrice">Цена, ₽</label>
+        <input id="sellPrice" class="price" type="text" inputmode="numeric" maxlength="11" autocomplete="off" placeholder="по рынку">
+        <div class="row">
+          <button id="sellPick" class="btn ghost" type="button">Добавить фото</button>
+          <span id="sellPhotoNote" class="hint"></span>
+          <input id="sellFiles" type="file" accept="image/*" multiple hidden>
+        </div>
+        <button id="sellGo" class="btn full" type="submit">Подготовить объявление</button>
+        <p class="hint">Помощник сам выберет категорию и заполнит форму Авито в соседней вкладке. Чего не знает, спросит у вас. Кнопку «Разместить» нажимаете вы.</p>
+      </form>
+      <div id="sellOut"></div>
+    </div>
+
+    <div id="tabBuyer" class="pane" hidden>
+      <section class="hero enter">
+        <h2>Что подобрать?</h2>
+        <p>Столы, кресла и лампы в Таганроге, Ростове-на-Дону и Азове. Напишите, что нужно, в каком городе и за сколько: чего не хватит, спрошу.</p>
+      </section>
+      <div id="buyerLog"></div>
+      <form id="buyerForm" class="card composer">
+        <label for="buyerText" class="sr">Ваше сообщение</label>
+        <div class="field">
+          <textarea id="buyerText" name="message" rows="2" maxlength="1000" autocomplete="off" placeholder="Например: стол и лампа в Азове до 7 тысяч…"></textarea>
+          <button id="buyerGo" class="btn" type="submit">Отправить</button>
+        </div>
+        <div class="chips small tries" data-fill="buyerText" aria-label="Примеры запросов">
+          <button type="button">Стол не шире метра, кресло и лампа. Таганрог. До 15 000 ₽ за всё.</button>
+          <button type="button">Кресло с регулировкой высоты и лампа от 4000 К, Азов, 6 тысяч</button>
+          <button type="button">Нужен стол в Ростове</button>
+        </div>
+        <div class="row tools">
+          <label class="check"><input id="buyerJson" class="switch" type="checkbox"> Ответ в формате кейса (JSON)</label>
+          <button id="buyerNew" class="btn ghost mini" type="button">Начать заново</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="foot">
+      <div class="row">
+        <span class="lbl">Вид</span>
+        <div class="seg" id="views" role="group" aria-label="Вид помощника">
+          <i class="thumb" aria-hidden="true"></i>
+          <button type="button" data-view="tab">Окно</button>
+          <button type="button" data-view="side">Сбоку</button>
+          <button type="button" data-view="popup">Выпадающее</button>
+        </div>
+      </div>
+      <button id="unpair" class="link" type="button">Отключить расширение от бота</button>
+    </div>
+  </section>
+  <div class="row prefs">
+    <span class="lbl">Тема</span>
+    <div class="seg" id="themes" role="group" aria-label="Тема страницы">
+      <i class="thumb" aria-hidden="true"></i>
+      <button type="button" data-theme="auto">Как в системе</button>
+      <button type="button" data-theme="light">Светлая</button>
+      <button type="button" data-theme="dark">Тёмная</button>
+    </div>
+  </div>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="bg.js"></script>
+<script src="web.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

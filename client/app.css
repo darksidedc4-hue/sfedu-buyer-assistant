@@ -1,0 +1,410 @@
+/* Страница помощника по Авито внутри расширения.
+   Оформление спокойное: ровные заливки без переливов и свечений, четыре пастельных цвета, у каждого одна роль:
+   голубой это действие (кнопка, выбранное, ваша цена), фисташковый это найденное и сделанное, сливочный это
+   «обратите внимание», коралловый это ошибка. Заголовки и цены набраны округлым Nunito, текст набран Onest.
+   Тема по выбору человека или как в системе (класс light на html ставит theme.js); цвета заданы переменными. Движение короткое (до 0,3 с), сдвигом и
+   прозрачностью; в покое на странице ничего не движется, бесконечные анимации идут только пока идёт поиск. */
+
+@font-face { font-family: "Onest"; src: url(fonts/onest-cyr.woff2) format("woff2"); font-weight: 400 700; font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Onest"; src: url(fonts/onest-lat.woff2) format("woff2"); font-weight: 400 700; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215; }
+/* из расширенной латиницы нужен только знак рубля */
+@font-face { font-family: "Onest"; src: url(fonts/onest-latx.woff2) format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+20BD; }
+@font-face { font-family: "Nunito"; src: url(fonts/nunito-cyr.woff2) format("woff2"); font-weight: 600 900; font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Nunito"; src: url(fonts/nunito-lat.woff2) format("woff2"); font-weight: 600 900; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215; }
+
+:root {
+  --bg: #16181c; --card: #1e2126; --raised: #282c32; --line: rgba(200, 215, 235, 0.09); --line2: rgba(200, 215, 235, 0.2);
+  --text: #e9ecf0; --hint: #a3aab5; --dim: #77808c;
+  /* действие */
+  --main: #b6d4f0; --main-hover: #c8dff5; --on-main: #14283a; --main-soft: rgba(182, 212, 240, 0.14); --ring: rgba(182, 212, 240, 0.32);
+  /* найдено и сделано */
+  --ok: #c2dfae; --ok-fill: #c2dfae; --on-ok: #1d3312; --ok-bg: rgba(194, 223, 174, 0.13);
+  /* внимание и ошибка */
+  --warn: #f2d7a4; --warn-bg: rgba(242, 215, 164, 0.13); --bad: #f2b5ae; --bad-bg: rgba(242, 181, 174, 0.13);
+  --lift: none; --float: 0 10px 28px rgba(0, 0, 0, 0.4);
+  --body: "Onest", system-ui, "Segoe UI", Roboto, sans-serif;
+  --head: "Nunito", "Onest", system-ui, "Segoe UI", sans-serif;
+  --out: cubic-bezier(0.2, 0.8, 0.2, 1); --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  color-scheme: dark;
+}
+html.light {
+    --bg: #f1f4f8; --card: #ffffff; --raised: #edf1f6; --line: rgba(30, 50, 80, 0.1); --line2: rgba(30, 50, 80, 0.22);
+    --text: #1d232b; --hint: #5b6572; --dim: #8a94a1;
+    --main: #bbd8f2; --main-hover: #a8cdee; --on-main: #12283b; --main-soft: #e4eff9; --ring: rgba(110, 165, 215, 0.45);
+    --ok: #36622a; --ok-fill: #b9d9a5; --on-ok: #1d3312; --ok-bg: #e4f1da;
+    --warn: #7a5a12; --warn-bg: #f8ecc9; --bad: #963a30; --bad-bg: #f9dfdb;
+    --lift: 0 1px 2px rgba(30, 50, 80, 0.06), 0 4px 12px rgba(30, 50, 80, 0.04); --float: 0 10px 28px rgba(30, 50, 80, 0.16);
+    color-scheme: light;
+  }
+
+* { box-sizing: border-box; }
+/* скрытое скрыто всегда: без этого display у .card перебивает атрибут hidden, и карточка остаётся на экране */
+[hidden] { display: none !important; }
+html { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--body); -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent; }
+/* отступы учитывают вырезы и полосу жестов телефона (сайт открывают и с него) */
+/* --- страница поверх фона-жалюзи (класс has-bg ставит bg.js, когда фон действительно рисуется) ---
+   Фон яркий и движется, поэтому всё, что на нём лежит, получает свою подложку: карточки и панели становятся
+   матовым стеклом (фон виден, но размыт и не спорит с текстом), а одиночные надписи садятся на плашки.
+   Без фона (нет WebGL) страница выглядит как раньше: правила ниже не действуют. */
+#bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.7; }
+#bg canvas { display: block; width: 100%; height: 100%; }
+/* края и низ уходят в темноту: взгляд остаётся на колонке с содержимым */
+#bg::after { content: ""; position: absolute; inset: 0;
+  background: radial-gradient(120% 90% at 50% 18%, transparent 30%, var(--bg) 100%),
+    /* под колонкой с текстом фон затемнён сильнее всего: читается текст, а полосы остаются по бокам */
+    linear-gradient(90deg, transparent calc(50% - 620px), var(--veil) calc(50% - 400px), var(--veil) calc(50% + 400px), transparent calc(50% + 620px)); }
+html.has-bg { --bg: #0d0e11; --card: rgba(24, 27, 32, 0.95); --raised: #2a2e35; --veil: rgba(13, 14, 17, 0.62);
+  --line: rgba(255, 255, 255, 0.12); --line2: rgba(255, 255, 255, 0.26); --text: #f2f4f7; --hint: #c3c9d3; --dim: #98a1ad;
+  --glass: blur(14px); --float: 0 14px 40px rgba(0, 0, 0, 0.5); }
+html.light.has-bg { --bg: #f4f7fb; --card: rgba(255, 255, 255, 0.96); --raised: #edf1f6; --veil: rgba(244, 247, 251, 0.6);
+    --line: rgba(24, 44, 76, 0.13); --line2: rgba(24, 44, 76, 0.26); --text: #171c23; --hint: #4a5562; --dim: #6c7683;
+    --float: 0 14px 40px rgba(30, 50, 80, 0.14); }
+html.has-bg main { position: relative; z-index: 1; }
+html.has-bg .card, html.has-bg .seg.modes, html.has-bg .seg.tabs, html.has-bg .foot, html.has-bg .got, html.has-bg .status {
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass); }
+html.has-bg .card { box-shadow: var(--float); border-radius: 16px; }
+html.has-bg .seg.modes, html.has-bg .seg.tabs { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
+html.has-bg .seg.modes .thumb, html.has-bg .seg.tabs .thumb { top: 4px; bottom: 4px; border-radius: 10px; }
+html.has-bg .seg.tabs .thumb { background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); }
+/* надписи, которые лежали прямо на фоне: статус, строка «Понял так», низ страницы, реплика человека */
+html.has-bg .status { padding: 5px 12px 5px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--text); }
+html.has-bg .got { padding: 8px 10px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+html.has-bg .foot { margin-top: 6px; padding: 12px 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
+  flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+html.has-bg .foot .link { color: var(--hint); }
+html.has-bg .said { background: rgba(182, 212, 240, 0.9); color: #14283a; box-shadow: var(--float); }
+html.has-bg h1 { text-shadow: 0 1px 14px rgba(0, 0, 0, 0.55); }
+html.light.has-bg h1 { text-shadow: 0 1px 10px rgba(255, 255, 255, 0.9); }
+html.light.has-bg #bg { opacity: 0.7; }
+/* на большом экране колонка не прижата к верху, заголовок крупнее */
+@media (min-width: 720px) and (min-height: 640px) {
+  html.has-bg main { padding-top: clamp(28px, 9vh, 104px); gap: 14px; }
+  html.has-bg h1 { font-size: 26px; }
+  html.has-bg header { margin-bottom: 4px; align-items: center; }
+}
+/* размытие под карточками считается на каждом кадре фона: кому нужно меньше движения, тому и без размытия */
+@media (prefers-reduced-motion: reduce) { html.has-bg { --glass: none; } }
+/* мелкий серый текст на карточке крупнее и светлее: на цветном фоне он терялся первым */
+html.has-bg .hint, html.has-bg .lbl { font-size: 14px; }
+html.has-bg .tries button { color: var(--hint); border-color: var(--line2); }
+html.has-bg ::placeholder { color: var(--dim); opacity: 1; }
+main { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px;
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(72px, calc(56px + env(safe-area-inset-bottom))) max(16px, env(safe-area-inset-left)); }
+p { margin: 0; text-wrap: pretty; }
+button, a, input, textarea, label { touch-action: manipulation; }
+h1, h2 { margin: 0; font-family: var(--head); font-weight: 800; text-wrap: balance; }
+h1 { font-size: 20px; line-height: 1.2; }
+h2 { font-size: 17px; line-height: 1.25; }
+
+/* --- шапка --- */
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; }
+.status { display: flex; align-items: center; gap: 8px; color: var(--hint); font-size: 13px; }
+.dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); transition: background 0.25s; }
+.status.ok .dot { background: var(--ok-fill); }
+.status.bad { color: var(--bad); }
+.status.bad .dot { background: var(--bad); }
+
+/* --- переключатель с ползунком: вид помощника и порядок списка --- */
+.seg { position: relative; display: inline-flex; padding: 3px; border-radius: 12px; background: var(--raised); isolation: isolate; }
+.seg .thumb { position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: 9px; background: var(--card); z-index: -1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18); transition: transform 0.26s var(--out), width 0.26s var(--out); }
+.seg button { position: relative; overflow: hidden; padding: 6px 12px; border: 0; border-radius: 9px; background: none; color: var(--hint);
+  font: 500 13px var(--body); cursor: pointer; transition: color 0.2s; }
+.seg button:hover { color: var(--text); }
+.seg button.on { color: var(--text); font-weight: 700; }
+/* режим помощника: кейс хакатона или поиск по Авито; ползунок цветом главного действия */
+.seg.modes { display: flex; }
+.seg.modes button { flex: 1; padding: 10px 6px; font: 800 14px var(--head); white-space: nowrap; }
+.seg.modes .thumb { background: var(--main); box-shadow: none; }
+.seg.modes button.on { color: var(--on-main); }
+/* разделы помощника: поиск и слежка */
+.seg.tabs { display: flex; }
+.seg.tabs button { flex: 1; padding: 9px 2px; font: 800 14px var(--head); white-space: nowrap; }
+/* диалог раздела «Подбор»: реплика человека справа, ответ помощника карточкой */
+.said { align-self: flex-end; max-width: 88%; padding: 9px 13px; border-radius: 12px 12px 3px 12px; background: var(--main-soft); overflow-wrap: anywhere; }
+/* гость на сайте (нет кода активации): открыт только поиск, поэтому разделы, слежка и скрытие продавцов убраны,
+   а карточка активации стоит под поиском как приглашение к остальному */
+html.guest #tabs, html.guest #watchBox, html.guest #blocked, html.guest [data-act="block"], html.guest [data-act="fav"] { display: none !important; }
+html.guest #pairBox { order: 5; }
+/* выбор темы внизу страницы: виден всегда, и без входа тоже */
+.prefs { margin-top: 6px; justify-content: space-between; }
+.prefs .lbl { margin: 0; }
+html.has-bg .prefs { padding: 10px 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass); }
+/* --- строка запроса раздела «Хакатон» ---
+   Пока диалога нет, она главный объект экрана: крупный заголовок, большое поле с кнопкой внутри, под ним примеры.
+   С первой реплики поле становится нижней панелью чата и остаётся под рукой, пока лента растёт. */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.hero { display: flex; flex-direction: column; gap: 10px; padding: clamp(10px, 5vh, 44px) 2px 6px; }
+.hero h2 { font-size: clamp(30px, 6vw, 44px); line-height: 1.05; letter-spacing: -0.015em; }
+.hero p { max-width: 58ch; font-size: 16px; line-height: 1.5; color: var(--hint); }
+html.has-bg .hero h2 { text-shadow: 0 2px 22px rgba(0, 0, 0, 0.6); }
+html.has-bg .hero p { color: var(--text); text-shadow: 0 1px 12px rgba(0, 0, 0, 0.75); }
+html.light.has-bg .hero h2, html.light.has-bg .hero p { text-shadow: 0 1px 12px rgba(255, 255, 255, 0.95); }
+.composer { gap: 12px; }
+.composer .field { position: relative; }
+.composer textarea { display: block; min-height: 112px; padding: 14px 16px 58px; font-size: 16px; line-height: 1.45; resize: none; border-radius: 12px; }
+.composer .field .btn { position: absolute; right: 10px; bottom: 10px; }
+.composer .tools { justify-content: space-between; }
+.composer .check { margin: 0; color: var(--hint); font-size: 13px; }
+.btn.mini { padding: 7px 14px; font-size: 13px; text-decoration: none; }
+.composer .tools { flex-wrap: wrap; gap: 8px 12px; }
+#tabBuyer:not(.talking) #buyerNew { display: none; }
+#tabBuyer.talking .hero, #tabBuyer.talking .tries { display: none; }
+#tabBuyer.talking .composer { position: sticky; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 5; box-shadow: var(--float); }
+#tabBuyer.talking .composer textarea { min-height: 54px; padding: 14px 132px 14px 16px; }
+#tabBuyer.talking .composer .field .btn { bottom: 50%; transform: translateY(50%); }
+#tabBuyer.talking .composer .field .btn:active { transform: translateY(50%) scale(0.97); }
+@media (pointer: coarse) { .btn.mini { min-height: 40px; } }
+/* как понят запрос: подпись и пункты; о чём ещё спросим, выделено цветом внимания */
+.got { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.got > span { color: var(--hint); margin-right: 2px; }
+.got i { font-style: normal; padding: 3px 9px; border-radius: 8px; background: var(--raised); min-width: 0; overflow-wrap: anywhere; }
+.got i b { font-weight: 700; color: var(--hint); margin-right: 3px; }
+.got i.ask { background: var(--warn-bg); color: var(--warn); }
+.got i.ask b { color: inherit; }
+.kit { gap: 8px; }
+.kit .head { display: flex; align-items: baseline; gap: 10px; }
+.kit .head .note { color: var(--hint); font-size: 13px; min-width: 0; }
+.kit .head b { margin-left: auto; }
+.kit .other { font-style: normal; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: var(--main-soft); font-size: 12px; white-space: nowrap; }
+.kit .head b { font: 800 20px/1.1 var(--head); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kit ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.kit li { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding-top: 6px; border-top: 1px solid var(--line); }
+.kit li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.kit li span:last-child { flex: none; color: var(--hint); font-variant-numeric: tabular-nums; }
+pre.json { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--raised); color: var(--hint); font: 12px/1.45 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow-y: auto; }
+/* полоса «идёт работа» в карточке подготовки объявления */
+.work-bar { height: 4px; border-radius: 2px; background: linear-gradient(100deg, var(--raised) 30%, var(--main) 50%, var(--raised) 70%) 0 0 / 220% 100%;
+  animation: shimmer 1.4s linear infinite; }
+.count { display: inline-block; min-width: 20px; margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--ok-fill); color: var(--on-ok);
+  font: 800 12px/20px var(--head); vertical-align: 1px; animation: pop 0.26s var(--spring); }
+.pane { display: flex; flex-direction: column; gap: 12px; }
+.seg.wide { display: flex; }
+.seg.wide button { flex: 1; padding: 8px 6px; font-size: 14px; }
+.seg.wide .thumb { background: var(--main); box-shadow: none; transition: none; view-transition-name: sort-thumb; }
+.seg.wide button.on { color: var(--on-main); }
+
+/* --- карточки --- */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: var(--lift); }
+#work, #out, #login, #list, #watches, #blocked, #sellOut, #buyerLog { display: flex; flex-direction: column; gap: 12px; }
+#login:empty, #out:empty, #list:empty, #watches:empty, #blocked:empty, #sellOut:empty, #buyerLog:empty { display: none; }
+.enter { animation: rise 0.3s var(--out) both; animation-delay: calc(var(--i, 0) * 40ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+label, .lbl { font-size: 13px; color: var(--hint); margin-bottom: -4px; }
+input, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); color: var(--text);
+  font: inherit; resize: vertical; transition: border-color 0.2s, box-shadow 0.2s; }
+input::placeholder, textarea::placeholder { color: var(--dim); }
+input:hover, textarea:hover { border-color: var(--line2); }
+input:focus, textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px var(--ring); }
+#code { font: 12px/1.4 ui-monospace, Consolas, monospace; }
+input[type="checkbox"] { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--main); cursor: pointer; }
+/* переключатель: тот же флажок, нарисованный ползунком */
+input.switch { appearance: none; -webkit-appearance: none; position: relative; width: 38px; height: 22px; border-radius: 999px; background: var(--raised);
+  border: 1px solid var(--line2); transition: background 0.2s, border-color 0.2s; }
+input.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--hint);
+  transition: transform 0.22s var(--out), background 0.2s; }
+input.switch:checked { background: var(--main); border-color: var(--main); }
+input.switch:checked::after { transform: translateX(16px); background: var(--on-main); }
+input.switch:focus { box-shadow: 0 0 0 3px var(--ring); }
+.check { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 14px; color: var(--text); cursor: pointer; }
+/* мелкое действие внутри строки: скрыть продавца */
+.mini { padding: 0; border: 0; background: none; color: var(--dim); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer; transition: color 0.2s; }
+.mini:hover { color: var(--bad); }
+.hint { color: var(--hint); font-size: 13px; }
+.card a { color: var(--main); text-underline-offset: 3px; }
+/* на светлой теме пастельный голубой как цвет ссылки не читается: берём его тёмный тон */
+html.light .card a { color: #1f5f96; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.foot { margin-top: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.foot .lbl { margin: 0; }
+
+/* --- кнопки --- */
+.btn { position: relative; overflow: hidden; align-self: flex-start; padding: 10px 20px; border: 0; border-radius: 10px; background: var(--main);
+  color: var(--on-main); font: 700 15px var(--body); cursor: pointer; transition: transform 0.15s var(--out), background 0.2s; }
+.btn:hover { background: var(--main-hover); }
+.btn:active { transform: scale(0.97); }
+.btn:focus-visible, .seg button:focus-visible, .chips button:focus-visible, .link:focus-visible, .ad:focus-visible { outline: 2px solid var(--main); outline-offset: 2px; }
+.btn.ghost { background: var(--raised); color: var(--text); }
+.btn.ghost:hover { background: var(--raised); box-shadow: inset 0 0 0 1px var(--line2); }
+.btn.full { align-self: stretch; padding-block: 12px; }
+/* запрос ушёл: вместо подписи крутится кольцо */
+.btn:disabled { color: transparent; cursor: default; transform: none; opacity: 0.75; }
+.btn:disabled::after { content: ""; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--on-main); border-right-color: transparent; animation: spin 0.6s linear infinite; }
+.btn.ghost:disabled::after { border-color: var(--text); border-right-color: transparent; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.link { padding: 0; border: 0; background: none; color: var(--dim); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline;
+  text-underline-offset: 3px; transition: color 0.2s; }
+.link:hover { color: var(--text); }
+.link.sure { color: var(--bad); font-weight: 700; animation: shake 0.3s var(--out); }
+/* круг от места нажатия */
+.ripple { position: absolute; border-radius: 50%; background: currentColor; opacity: 0.14; transform: scale(0); pointer-events: none;
+  animation: ripple 0.45s var(--out) forwards; }
+@keyframes ripple { to { transform: scale(1); opacity: 0; } }
+@keyframes shake { 25% { transform: translateX(-4px); } 50% { transform: translateX(3px); } 75% { transform: translateX(-2px); } }
+.shake { animation: shake 0.3s var(--out); }
+
+/* --- метки и выбор --- */
+.pill { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.pill .dot { width: 6px; height: 6px; background: currentColor; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips button { position: relative; overflow: hidden; padding: 7px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised);
+  color: var(--text); font: inherit; cursor: pointer; transition: transform 0.15s var(--out), border-color 0.2s, background 0.2s, color 0.2s; }
+.chips button:hover { border-color: var(--line2); }
+.chips button:active { transform: scale(0.96); }
+.chips button.on { background: var(--main); border-color: var(--main); color: var(--on-main); font-weight: 700; }
+.chips button.pop { animation: pop 0.26s var(--spring); }
+@keyframes pop { 0% { transform: scale(0.9); } }
+.chips.small button { padding: 5px 11px; font-size: 13px; border-radius: 8px; }
+/* готовые примеры под полем: нажал, и текст в поле */
+.tries { margin-top: -2px; }
+.tries button { color: var(--hint); text-align: left; background: none; }
+.tries button:hover { color: var(--text); }
+/* палец крупнее курсора: на сенсорных экранах элементы выше, а поля с шрифтом 16, чтобы телефон не приближал страницу */
+@media (pointer: coarse) {
+  .btn { padding-block: 13px; }
+  .chips button, .chips.small button, .seg button { min-height: 40px; }
+  input, textarea { font-size: 16px; }
+  input[type="checkbox"]:not(.switch) { width: 22px; height: 22px; }
+}
+
+/* --- ход поиска: маршрут из пяти остановок --- */
+.route { position: relative; --p: 0; margin: 2px 0 4px; }
+.route .rail { position: absolute; top: 6px; left: 10%; right: 10%; height: 2px; border-radius: 2px; background: var(--line2); }
+.route .rail i { display: block; height: 100%; border-radius: 2px; background: var(--ok-fill); transform-origin: left center;
+  transform: scaleX(calc(var(--p) / 4)); transition: transform 0.5s var(--out); }
+.route ol { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); margin: 0; padding: 0; list-style: none; }
+.route li { display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 11px; color: var(--dim); text-align: center; transition: color 0.25s; }
+.route li::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--card); border: 2px solid var(--line2);
+  transition: border-color 0.25s, background 0.25s; }
+.route li.done { color: var(--hint); }
+.route li.done::before { background: var(--ok-fill); border-color: var(--ok-fill); }
+.route li.now { color: var(--text); font-weight: 700; }
+.route li.now::before { background: var(--main); border-color: var(--main); animation: beacon 1.6s ease-out infinite; }
+@keyframes beacon { 0% { box-shadow: 0 0 0 0 var(--ring); } 100% { box-shadow: 0 0 0 9px transparent; } }
+.tick { animation: tick 0.26s var(--out); }
+@keyframes tick { from { opacity: 0; transform: translateY(6px); } }
+/* заготовки карточек, пока объявления собираются */
+.ghost-card { height: 96px; border-radius: 12px; border: 1px solid var(--line);
+  background: linear-gradient(100deg, var(--card) 30%, var(--raised) 50%, var(--card) 70%) 0 0 / 220% 100%; animation: shimmer 1.5s linear infinite; }
+.ghost-card + .ghost-card { opacity: 0.55; }
+@keyframes shimmer { to { background-position: -220% 0; } }
+
+/* --- объявление --- */
+.stats { display: flex; gap: 4px 16px; flex-wrap: wrap; font-size: 13px; color: var(--hint); }
+.stats b { margin-right: 5px; color: var(--text); font: 800 15px var(--head); }
+.ad { position: relative; flex-direction: row; gap: 12px; align-items: stretch; text-decoration: none; color: inherit;
+  transition: transform 0.2s var(--out), border-color 0.2s; }
+.ad:hover { transform: translateY(-2px); border-color: var(--line2); }
+.ad:active { transform: scale(0.99); }
+.ad .rank { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 8px; background: var(--raised); color: var(--hint);
+  font: 800 13px var(--head); }
+.ad.top .rank { background: var(--ok-fill); color: var(--on-ok); }
+.ad .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.ad .tag { align-self: flex-start; padding: 2px 9px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font-size: 12px; font-weight: 700; }
+.ad .name { font-weight: 700; overflow-wrap: anywhere; }
+.ad .meta { display: flex; gap: 7px; align-items: flex-start; color: var(--hint); font-size: 13px; overflow-wrap: anywhere; }
+.ad .meta svg { flex: none; width: 15px; height: 15px; margin-top: 2px; fill: none; stroke: var(--dim); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ad .meta.note { font-style: italic; }
+/* Ценник: отрывная часть карточки. Перфорация это пунктир и два выреза по краям, как у бирки или билета. */
+.ad .sum { position: relative; flex: none; min-width: 168px; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 2px;
+  padding-left: 16px; border-left: 1px dashed var(--line2); white-space: nowrap; }
+.ad .sum::before, .ad .sum::after { content: ""; position: absolute; left: -7px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg);
+  border: 1px solid var(--line); }
+.ad .sum::before { top: -23px; }
+.ad .sum::after { bottom: -23px; }
+.ad .sum b { font: 800 20px/1.1 var(--head); font-variant-numeric: tabular-nums; }
+.ad .sum small { font-size: 12px; color: var(--hint); }
+/* сравнение с рынком: ниже медианы выделяем, выше пишем спокойно */
+.ad .sum .vs.low { color: var(--ok); font-weight: 700; }
+
+/* --- слежка за ценой --- */
+.card.warned { border-color: var(--warn-bg); background: linear-gradient(var(--warn-bg), var(--warn-bg)), var(--card); }
+input.price { width: 170px; font: 800 18px var(--head); font-variant-numeric: tabular-nums; }
+#watchGap { transition: color 0.2s; }
+#watchGap:empty { display: none; }
+#watchGap.good { color: var(--ok); }
+#watchMsg { color: var(--bad); }
+#watchMsg:empty { display: none; }
+.watch { transition: opacity 0.25s; }
+.watch.paused { opacity: 0.7; }
+.watch .name { font: 800 16px var(--head); overflow-wrap: anywhere; }
+.watch .row label { margin: 0; }
+/* шкала: ваша цена против рынка; точки на ней это находки */
+.gauge { position: relative; padding: 24px 0 23px; }
+.gauge .bar { position: relative; height: 6px; border-radius: 3px; background: var(--raised); }
+.gauge .gap { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: repeating-linear-gradient(115deg, var(--line2) 0 4px, transparent 4px 8px); }
+.gauge .you, .gauge .mkt { position: absolute; top: -5px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; }
+.gauge .you { background: var(--main); }
+.gauge .mkt { background: var(--dim); }
+.gauge .hit { position: absolute; top: -3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--ok-fill); border: 2px solid var(--card); }
+.gauge .cap { position: absolute; font-size: 12px; white-space: nowrap; color: var(--hint); }
+.gauge .cap b { color: var(--text); font: 800 14px var(--head); }
+.gauge .cap.t { top: 0; }
+.gauge .cap.m { bottom: 0; }
+.watch .hits { display: flex; flex-direction: column; gap: 6px; }
+.watch .hits a { display: flex; gap: 10px; align-items: baseline; padding: 8px 11px; border-radius: 10px; background: var(--ok-bg); color: var(--text);
+  text-decoration: none; transition: transform 0.18s var(--out); }
+.watch .hits a:hover { transform: translateX(3px); }
+/* находка, которой человек ещё не видел */
+.watch .hits a.new { box-shadow: inset 3px 0 0 var(--ok-fill); }
+.watch .hits em { flex: none; font-style: normal; font-size: 12px; font-weight: 700; color: var(--ok); }
+.watch .hits b { flex: none; color: var(--ok); font: 800 15px var(--head); white-space: nowrap; }
+/* первая строка: цена, «новое», когда найдено; вторая во всю ширину: название и чем находка хороша */
+.watch .hits a { flex-wrap: wrap; row-gap: 3px; }
+.watch .hits b { margin-right: auto; }
+.watch .hits a > span { flex: 1 0 100%; order: 3; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.watch .hits small { flex: none; font-size: 12px; color: var(--hint); white-space: nowrap; }
+/* подходят, но чуть дороже цели: за ними слежка смотрит поимённо */
+.watch .near a { background: var(--raised); }
+.watch .near b { color: var(--text); }
+.watch .hits i { font-style: normal; color: var(--ok); }
+.watch .actions { justify-content: space-between; }
+.watch .actions .btn { padding: 8px 16px; font-size: 14px; }
+
+/* --- сообщение о действии: всплывает снизу --- */
+.toast { position: fixed; left: 50%; bottom: 16px; z-index: 5; width: max-content; max-width: calc(100% - 28px); padding: 10px 16px; border-radius: 10px;
+  background: var(--raised); border: 1px solid var(--line2); box-shadow: var(--float); color: var(--text); font-size: 14px; font-weight: 500; text-align: center;
+  pointer-events: none; opacity: 0; transform: translate(-50%, 14px); transition: opacity 0.2s, transform 0.26s var(--out); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.bad { border-color: var(--bad); color: var(--bad); }
+
+/* --- плавная смена экрана после действия (порядок списка, пауза, удаление) --- */
+::view-transition-group(*) { animation-duration: 0.28s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.18s; }
+
+/* --- узкие виды: сбоку и выпадающее окошко. Chrome берёт размер окошка по содержимому, шире 800 и выше 600 не даёт.
+   Ценник в узком виде уходит вниз карточки, вырезы встают по её левому и правому краю. --- */
+html.popup { width: 430px; }
+html.popup body { min-height: 420px; max-height: 600px; overflow-y: auto; }
+html.popup main, html.side main { padding: 16px 12px 64px; }
+html.popup h1, html.side h1 { font-size: 18px; }
+html.popup .ad, html.side .ad { flex-wrap: wrap; }
+html.popup .ad .sum, html.side .ad .sum { flex: 1 0 100%; min-width: 0; flex-direction: row; justify-content: space-between; align-items: baseline;
+  padding: 12px 0 0; border-left: 0; border-top: 1px dashed var(--line2); }
+html.popup .ad .sum::before, html.side .ad .sum::before { top: -7px; left: -23px; }
+html.popup .ad .sum::after, html.side .ad .sum::after { top: -7px; bottom: auto; left: auto; right: -23px; }
+@media (max-width: 520px) {
+  .ad { flex-wrap: wrap; }
+  .ad .sum { flex: 1 0 100%; min-width: 0; flex-direction: row; justify-content: space-between; align-items: baseline; padding: 12px 0 0; border-left: 0;
+    border-top: 1px dashed var(--line2); }
+  .ad .sum::before { top: -7px; left: -23px; }
+  .ad .sum::after { top: -7px; bottom: auto; left: auto; right: -23px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

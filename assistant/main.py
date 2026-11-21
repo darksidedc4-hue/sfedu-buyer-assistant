@@ -41,7 +41,8 @@ def explain(messages: list[dict], catalog: list, deadline: float | None = None) 
     покупателя получилась структура, по которой идёт подбор. В stdout ./run уходит только первое."""
     need = extract.needs_from_dialogue(messages, deadline)
     city_names = {c["id"]: c["name"] for c in extract.cities()}
-    return _decide(need, messages, catalog, city_names), reply.understood(need, city_names)
+    result = _decide(need, messages, catalog, city_names)
+    return (reply.off_topic(result) if need.off_topic else result), reply.understood(need, city_names)
 
 
 def _decide(need, messages: list[dict], catalog: list, city_names: dict) -> dict:

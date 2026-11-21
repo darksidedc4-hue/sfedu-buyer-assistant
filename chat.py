@@ -47,12 +47,17 @@ def main() -> int:
             continue
         messages.append({"role": "user", "text": text})
         try:
-            result = app.answer(messages, catalog)
+            result, got = app.explain(messages, catalog)
         except LLMError as e:
             print("Модель недоступна: %s" % e)
             messages.pop()
             continue
         said = as_text(result)
+        off = next((g for g in got if g.get("off")), None)
+        if off and result["status"] == "ok":      # посторонний вопрос: отвечаем отказом, варианты заново не печатаем
+            print("\nПомощник: %s Ваш прежний запрос в силе: напишите «покажи варианты», и я выведу их снова." % off["note"])
+            messages.append({"role": "assistant", "text": said})
+            continue
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         print("\nПомощник: " + said)

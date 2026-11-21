@@ -39,6 +39,7 @@ class Needs:
     item_order: dict = field(default_factory=dict)      # категория -> "cheap" или "expensive": пожелание по цене товара
     price_limits: dict = field(default_factory=dict)    # категория -> [(сравнение, рубли)]: границы цены одного товара
     expensive: bool = False             # покупатель просит самое дорогое: варианты идут от дорогого к дешёвому
+    off_topic: bool = False             # последняя реплика не о подборе: посторонний вопрос или болтовня
     wants_other: bool = False           # показанные варианты не подошли: нужны другие, а не те же самые
     no_limit: bool = False              # покупатель сам отказался от предела по сумме: это его решение, а не подстановка
     problem_budget: str = ""            # "", "missing", "unclear"
@@ -52,7 +53,7 @@ def schema(city_ids: list[str]) -> dict:
         "op": {"type": "string", "enum": list(OPS)}, "value": {"type": "number"}, "unit": {"type": "string"}}}
     return {
         "type": "object", "additionalProperties": False,
-        "required": ["categories", "other_items", "what_is_unclear", "wants_other", "price_order", "table_price", "chair_price",
+        "required": ["categories", "other_items", "what_is_unclear", "wants_other", "off_topic", "price_order", "table_price", "chair_price",
                      "lamp_price", "item_price_limits", "city_said", "city_id", "budget_said", "budget_value",
                      "budget_unit", "table_width", "chair_adjustable", "lamp_color_temperature"],
         "properties": {
@@ -60,6 +61,7 @@ def schema(city_ids: list[str]) -> dict:
             "other_items": {"type": "array", "items": {"type": "string"}},
             "what_is_unclear": {"type": "boolean"},
             "wants_other": {"type": "string", "enum": ["yes", "no"]},
+            "off_topic": {"type": "string", "enum": ["yes", "no"]},
             "price_order": {"type": "string", "enum": ["cheap", "expensive"]},
             "table_price": {"type": "string", "enum": ["any", "cheap", "expensive"]},
             "chair_price": {"type": "string", "enum": ["any", "cheap", "expensive"]},
@@ -106,6 +108,11 @@ what_is_unclear: true, если непонятно, что именно поку
 wants_other: yes, только если помощник в предыдущей реплике уже показал варианты товаров, а покупатель в последней \
 реплике ими недоволен или просит другие («не нравится», «не то», «другие», «ещё варианты», «покажи ещё», \
 грубое слово в адрес показанного). Во всех остальных случаях no, в том числе когда вариантов ещё не показывали.
+off_topic: yes, если последняя реплика покупателя не о подборе товаров: посторонний вопрос («кем был Обама», \
+«какая погода», «он точно американец?»), просьба о другом («расскажи анекдот», «напиши код») или болтовня. Всё, что \
+касается подбора, это no: названные условия, ответы на вопросы помощника, вопросы и замечания о показанных товарах \
+(«а есть подешевле?», «не нравится», «почему этот стол?»), приветствие и «спасибо». Условия подбора при этом бери \
+из прежних реплик как обычно: посторонний вопрос их не отменяет.
 price_order: expensive, только если покупатель прямо просит самое дорогое («самый дорогой», «самые дорогие», \
 «подороже», «покажи дорогие», «лучшее, что есть, цена не важна») и позже от этого не отказался. Иначе cheap. \
 Слова о бюджете («до 15 тысяч», «бюджет не ограничен») сами по себе не expensive. Просьба «подешевле» возвращает cheap.
@@ -158,23 +165,23 @@ chair_adjustable: yes, если нужна регулировка высоты �
 
 Примеры.
 Диалог: 1. Покупатель: Стол не шире метра, кресло и лампа. Таганрог. До 15 000 ₽ за всё.
-Ответ: {"categories":["table","chair","lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no","price_order":"cheap","table_price":"any","chair_price":"any","lamp_price":"any","item_price_limits":[],"city_said":"Таганрог",\
+Ответ: {"categories":["table","chair","lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no","off_topic":"no","price_order":"cheap","table_price":"any","chair_price":"any","lamp_price":"any","item_price_limits":[],"city_said":"Таганрог",\
 "city_id":"taganrog","budget_said":"exact","budget_value":15000,"budget_unit":"rub",\
 "table_width":[{"op":"<=","value":1,"unit":"m"}],"chair_adjustable":"any","lamp_color_temperature":[]}
 Диалог: 1. Покупатель: Нужны кресло с регулировкой высоты и лампа теплее 3500 К, недорого. 2. Помощник: В каком \
 городе и какой бюджет? 3. Покупатель: Ростов, 9 тысяч. И диван ещё.
-Ответ: {"categories":["chair","lamp"],"other_items":["диван"],"what_is_unclear":false,"wants_other":"no","price_order":"cheap","table_price":"any","chair_price":"any","lamp_price":"any","item_price_limits":[],"city_said":"Ростов",\
+Ответ: {"categories":["chair","lamp"],"other_items":["диван"],"what_is_unclear":false,"wants_other":"no","off_topic":"no","price_order":"cheap","table_price":"any","chair_price":"any","lamp_price":"any","item_price_limits":[],"city_said":"Ростов",\
 "city_id":"rostov-na-donu","budget_said":"exact","budget_value":9,"budget_unit":"thousand_rub","table_width":[],\
 "chair_adjustable":"yes","lamp_color_temperature":[{"op":"<","value":3500,"unit":"K"}]}
 Диалог: 1. Покупатель: Хочу кресло от 3 тысяч, лампу самую дешёвую и стол самый дорогой
-Ответ: {"categories":["table","chair","lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no",\
+Ответ: {"categories":["table","chair","lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no","off_topic":"no",\
 "price_order":"cheap","table_price":"expensive","chair_price":"any","lamp_price":"cheap",\
 "item_price_limits":[{"item":"chair","op":">=","value":3,"unit":"thousand_rub"}],"city_said":"","city_id":"none",\
 "budget_said":"none","budget_value":0,"budget_unit":"rub","table_width":[],"chair_adjustable":"any",\
 "lamp_color_temperature":[]}
 Диалог: 1. Покупатель: Хочу игровую приставку. 2. Помощник: В каталоге есть только столы, кресла и лампы, приставку \
 подобрать не смогу. Что из этого вам нужно? В каком городе и какой бюджет? 3. Покупатель: Азов, нужна лампа
-Ответ: {"categories":["lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no","price_order":"cheap","table_price":"any","chair_price":"any","lamp_price":"any","item_price_limits":[],"city_said":"Азов","city_id":"azov",\
+Ответ: {"categories":["lamp"],"other_items":[],"what_is_unclear":false,"wants_other":"no","off_topic":"no","price_order":"cheap","table_price":"any","chair_price":"any","lamp_price":"any","item_price_limits":[],"city_said":"Азов","city_id":"azov",\
 "budget_said":"none","budget_value":0,"budget_unit":"rub","table_width":[],"chair_adjustable":"any",\
 "lamp_color_temperature":[]}""" % names
 
@@ -226,7 +233,8 @@ def normalize(raw: dict, city_list: list[dict]) -> Needs:
         if isinstance(limit, dict) and limit.get("item") in need.categories:
             got = _limits([limit], {"rub": 1, "thousand_rub": 1000}, 0, 1_000_000_000)
             need.price_limits.setdefault(limit["item"], []).extend(g for g in got if g not in need.price_limits.get(limit["item"], []))
-    need.wants_other = raw.get("wants_other") == "yes"
+    need.off_topic = raw.get("off_topic") == "yes"
+    need.wants_other = raw.get("wants_other") == "yes" and not need.off_topic
     need.city_said = " ".join(str(raw.get("city_said") or "").split())[:60]
     known = {c["id"] for c in city_list}
     city = raw.get("city_id")
@@ -260,5 +268,5 @@ def needs_from_dialogue(messages: list[dict], deadline: float | None = None) -> 
     rules = prompt(city_list)
     raw = llm.ask([{"role": "system", "content": rules},
                    {"role": "user", "content": transcript(messages, API_TEXT_LIMIT - len(rules.encode("utf-8")))}],
-                  schema([c["id"] for c in city_list]), "buyer_requirements", max_tokens=400, deadline=deadline)
+                  schema([c["id"] for c in city_list]), "buyer_requirements", max_tokens=900, deadline=deadline)
     return normalize(raw, city_list)

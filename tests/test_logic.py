@@ -20,7 +20,7 @@ def item(id_, category, price, city="taganrog", **attrs):
 
 
 def raw(**over):
-    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "wants_other": "no", "price_order": "cheap", "table_price": "any", "chair_price": "any", "lamp_price": "any",
+    base = {"categories": ["table"], "other_items": [], "what_is_unclear": False, "wants_other": "no", "off_topic": "no", "price_order": "cheap", "table_price": "any", "chair_price": "any", "lamp_price": "any",
             "item_price_limits": [], "city_said": "Таганрог", "city_id": "taganrog",
             "budget_said": "exact", "budget_value": 15000, "budget_unit": "rub", "table_width": [], "chair_adjustable": "any",
             "lamp_color_temperature": []}
@@ -293,6 +293,20 @@ class Normalize(unittest.TestCase):
         hard = extract.normalize(raw(categories=["chair"], item_price_limits=[{"item": "chair", "op": ">", "value": 99, "unit": "thousand_rub"}]), CITIES)
         self.assertEqual(picker.options(catalog, hard), [])
         self.assertIn("нет кресла дороже 99 000 ₽", reply.no_match(hard, picker.why_nothing(catalog, hard, list(NAMES)), NAMES)["message"])
+
+    def test_off_topic_is_refused_within_the_contract(self):
+        need = extract.normalize(raw(off_topic="yes", wants_other="yes"), CITIES)
+        self.assertEqual((need.off_topic, need.wants_other), (True, False))          # посторонний вопрос не просьба «покажи другие»
+        catalog = [item("t1", "table", 1000)]
+        ok = reply.off_topic(reply.ok(need, picker.options(catalog, need), NAMES))
+        self.assertEqual((ok["status"], ok["options"][0]["listing_ids"]), ("ok", ["t1"]))
+        self.assertTrue(ok["options"][0]["explanation"].startswith(reply.OFF_TOPIC))
+        ask = reply.off_topic(reply.clarify(extract.normalize(raw(off_topic="yes", budget_said="none"), CITIES), NAMES))
+        self.assertEqual([q["field"] for q in ask["questions"]], ["budget_rub"])
+        self.assertTrue(ask["questions"][0]["text"].startswith(reply.OFF_TOPIC))
+        got = reply.understood(need, NAMES)
+        self.assertTrue(got[0]["off"] and got[0]["note"] == reply.OFF_TOPIC)
+        self.assertFalse(any(g.get("off") for g in reply.understood(extract.normalize(raw(), CITIES), NAMES)))
 
     def test_garbage_from_model_is_dropped(self):
         need = extract.normalize(raw(categories=["lamp", "sofa", "table", "table"], table_width=[{"op": "~", "value": 5, "unit": "cm"},

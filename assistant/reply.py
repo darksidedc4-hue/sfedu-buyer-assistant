@@ -60,9 +60,26 @@ def conditions(need: Needs) -> list[str]:
     return [NAME[c] + " " + ", ".join(rule_words(c, need)) for c in need.categories if rule_words(c, need)]
 
 
+OFF_TOPIC = "Я помогаю только с подбором столов, кресел и ламп из каталога, на другие вопросы не отвечаю."
+
+
+def off_topic(result: dict) -> dict:
+    """Посторонний вопрос. Статус остаётся тем, какого требует контракт для известных условий, а текст начинается
+    с того, что на такое помощник не отвечает: человек, который читает ответ, не примет его за ответ на вопрос."""
+    if result["status"] == "clarify":
+        result["questions"][0]["text"] = OFF_TOPIC + " " + result["questions"][0]["text"]
+    elif result["status"] == "no_match":
+        result["message"] = OFF_TOPIC + " " + result["message"]
+    else:
+        first = result["options"][0]
+        first["explanation"] = OFF_TOPIC + " Ваш прежний запрос в силе. " + first["explanation"]
+    return result
+
+
 def understood(need: Needs, city_names: dict[str, str]) -> list[dict]:
-    """Как понят запрос, по пунктам: что, где, за сколько, с какими условиями. known=False: об этом ещё спросим."""
-    out = []
+    """Как понят запрос, по пунктам: что, где, за сколько, с какими условиями. known=False: об этом ещё спросим.
+    off=True у первого пункта: последняя реплика не по теме, интерфейс показывает отказ вместо повтора вариантов."""
+    out = [{"label": "Вопрос", "text": "не о подборе", "known": False, "off": True, "note": OFF_TOPIC}] if need.off_topic else []
     what = _join([NAME[c] for c in need.categories]) if need.categories else "не названо"
     if need.unsupported:
         what += "; нет в каталоге: " + ", ".join(need.unsupported)
