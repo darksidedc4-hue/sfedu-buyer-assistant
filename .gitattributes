@@ -1,2 +1,4 @@
 # В Linux bash не запустит run с переводами строк Windows: во всём репозитории держим LF.
 * text=auto eol=lf
+# Файлы запуска для Windows: командной строке нужны её переводы строк.
+*.cmd text eol=crlf

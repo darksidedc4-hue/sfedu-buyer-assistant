@@ -41,11 +41,18 @@ chmod +x run
 ./run --catalog "$PWD/data/catalog.json" < examples/02-clarification/request.json
 ```
 
-Диалог в консоли для показа:
+Диалог в консоли для показа, одним файлом:
 
-```sh
-python3 chat.py            # добавьте --json, чтобы видеть и сырой ответ по контракту
-```
+| Система | Файл | Как запустить |
+|---|---|---|
+| Windows | `start.cmd` | двойной щелчок |
+| Linux, macOS | `start.sh` | `./start.sh` |
+
+Оба проверяют, что есть Python и ключ (файл `.env` или переменные `LLM_*`), и открывают диалог. С `--json` виден и сырой
+ответ по контракту. То же без файла запуска: `python3 chat.py`.
+
+Запуск по контракту в Windows: `run.cmd --catalog C:\путь\catalog.json < request.json > response.json` (тот же `run`,
+но для командной строки Windows; проверка на Linux использует `./run`).
 
 ## Как помощник ведёт диалог
 
